@@ -15,6 +15,9 @@ spring:
         trustCertificateKeyStoreType: PKCS12
         trustCertificateKeyStorePassword: ${DB_TRUSTSTORE_PASSWORD}
         connectionTimeZone: UTC
+        # Without these the driver waits forever if the network silently drops the connection.
+        connectTimeout: 10000
+        socketTimeout: 30000
 
 app:
   security:

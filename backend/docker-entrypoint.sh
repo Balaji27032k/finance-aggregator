@@ -2,6 +2,9 @@
 # Builds the JDBC truststore from the CA certificate passed as an environment variable, then starts the app.
 set -eu
 
+log() { printf '[entrypoint %s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+log "container started (PORT=${PORT:-unset}, memory limit: $(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo unknown))"
+
 : "${AIVEN_CA_PEM:?AIVEN_CA_PEM must contain the Aiven CA certificate (PEM)}"
 
 TLS_DIR=/tmp/tls
@@ -26,5 +29,6 @@ keytool -importcert -noprompt -alias aiven-ca -file "$TLS_DIR/ca.pem" \
 # Hosting platforms give the port to listen on through PORT.
 export SERVER_PORT="${PORT:-8080}"
 
+log "truststore ready; starting the JVM (JAVA_OPTS=$JAVA_OPTS)"
 # shellcheck disable=SC2086
 exec java $JAVA_OPTS -jar /app/app.jar
