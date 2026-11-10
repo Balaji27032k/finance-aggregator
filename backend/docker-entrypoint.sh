@@ -6,7 +6,16 @@ set -eu
 
 TLS_DIR=/tmp/tls
 mkdir -p "$TLS_DIR"
-printf '%s\n' "$AIVEN_CA_PEM" > "$TLS_DIR/ca.pem"
+# Dashboards often flatten the multi-line PEM into one line (or escape newlines), so rebuild a clean PEM from the base64 body.
+CA_BODY="$(printf '%s' "$AIVEN_CA_PEM" \
+  | sed -e 's/-----BEGIN CERTIFICATE-----//' -e 's/-----END CERTIFICATE-----//' -e 's/\\n//g' \
+  | tr -d ' \r\n\t')"
+{
+  echo '-----BEGIN CERTIFICATE-----'
+  printf '%s' "$CA_BODY" | fold -w 64
+  echo
+  echo '-----END CERTIFICATE-----'
+} > "$TLS_DIR/ca.pem"
 
 DB_TRUSTSTORE_PASSWORD="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
 export DB_TRUSTSTORE_PASSWORD
