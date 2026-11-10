@@ -7,8 +7,8 @@ log "container started (PORT=${PORT:-unset}, memory limit: $(cat /sys/fs/cgroup/
 
 : "${AIVEN_CA_PEM:?AIVEN_CA_PEM must contain the Aiven CA certificate (PEM)}"
 
-TLS_DIR=/tmp/tls
-mkdir -p "$TLS_DIR"
+# A fresh directory per start: a restarted container keeps its old files and keytool refuses to overwrite a keystore.
+TLS_DIR="$(mktemp -d /tmp/tls.XXXXXX)"
 # Dashboards often flatten the multi-line PEM into one line (or escape newlines), so rebuild a clean PEM from the base64 body.
 CA_BODY="$(printf '%s' "$AIVEN_CA_PEM" \
   | sed -e 's/-----BEGIN CERTIFICATE-----//' -e 's/-----END CERTIFICATE-----//' -e 's/\\n//g' \
