@@ -1,0 +1,32 @@
+# Secrets
+.env
+*.pem
+*.jks
+*.keystore
+keystore.properties
+local.properties
+google-services.json
+secrets/
+
+# Backend
+backend/target/
+*.log
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/.idea/
+*.apk
+*.aab
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

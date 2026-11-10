@@ -1,0 +1,22 @@
+spring:
+  flyway:
+    # Lets the app adopt tables created by hand from V1 instead of failing on a non-empty schema.
+    baseline-on-migrate: true
+    baseline-version: "1"
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslMode=VERIFY_CA
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      # Aiven small plans allow few connections.
+      maximum-pool-size: 5
+      data-source-properties:
+        trustCertificateKeyStoreUrl: file:///${DB_TRUSTSTORE_PATH}
+        trustCertificateKeyStoreType: PKCS12
+        trustCertificateKeyStorePassword: ${DB_TRUSTSTORE_PASSWORD}
+        connectionTimeZone: UTC
+
+app:
+  security:
+    pairing-code: ${DEVICE_PAIRING_CODE}
+    payload-encryption-key: ${PAYLOAD_ENCRYPTION_KEY}

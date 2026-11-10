@@ -1,0 +1,6 @@
+# Loads the repo-root .env for local runs; paths are relative to the working directory (backend/ or repo root).
+spring:
+  config:
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:./.env[.properties]

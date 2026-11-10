@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: finance-aggregator-backend
+  profiles:
+    default: local
+    group:
+      local: mysql,dotenv
+      prod: mysql
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  mvc:
+    log-request-details: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+app:
+  rate-limit:
+    anonymous-per-minute: 5
+    device-per-minute: 300
