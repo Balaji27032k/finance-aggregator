@@ -2,3 +2,6 @@
 server:
   address: 127.0.0.1
   forward-headers-strategy: native
+  tomcat:
+    threads:
+      max: 20

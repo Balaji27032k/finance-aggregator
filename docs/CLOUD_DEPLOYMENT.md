@@ -1,4 +1,21 @@
-# Cloud Deployment (Oracle Cloud Always Free)
+# Cloud Deployment
+
+Two options. **Option A (Render, no payment card)** is the one in use when Oracle sign-up is not possible. Option B is Oracle Cloud Always Free (needs a card for identity verification).
+
+## Option A: Render free web service (no card)
+Facts checked against Render docs (Nov 2026): free web service = 0.1 CPU / 512 MB RAM, spins down after 15 minutes without inbound traffic and takes about a minute or more to start again, 750 free instance hours per month, ephemeral filesystem (fine: all data is in Aiven MySQL), managed TLS, Docker supported. Render says free instances are not for production use and may restart at any time. The phone queues events and retries, so downtime delays sync but loses nothing.
+
+1. Push this repo to a **private** GitHub repository (`.env`, `secrets/` and keys are git-ignored).
+2. Sign up at render.com with GitHub. New > Blueprint > pick the repo. It reads `render.yaml` and creates `finance-backend` on the Free plan. Choose the Singapore region.
+3. Enter the secret env vars when prompted (values from your local `.env`): `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DEVICE_PAIRING_CODE`, `PAYLOAD_ENCRYPTION_KEY`, and `AIVEN_CA_PEM` (the whole contents of `secrets/aiven-ca.pem`, including the BEGIN/END lines).
+4. Aiven console > MySQL > Allowed IP addresses: add the service's outbound ranges from Render (service page > Connect > Outbound).
+5. Wait for the first deploy (build several minutes; first start can take a few minutes on 0.1 CPU). Check `https://<service>.onrender.com/actuator/health`.
+6. Phone > Health > Cloud sync: enter that https address and the pairing code, tap Pair, then Sync now.
+7. Optional keep-warm: a free uptime monitor hitting `/actuator/health` every 5 minutes avoids cold starts (one always-on service uses about 744 of the 750 monthly hours).
+
+Updating: push to the repo, then Manual Deploy in Render (`autoDeploy` is off).
+
+## Option B: Oracle Cloud Always Free
 
 Backend runs on one Always Free VM: Caddy (HTTPS, automatic certificate) in front of the Spring Boot jar on 127.0.0.1:8080, talking to Aiven MySQL over TLS. MySQL and Kafka are never exposed by this VM.
 

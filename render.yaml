@@ -1,0 +1,27 @@
+# Render Blueprint. Secret values are entered in the Render dashboard (sync: false) and never stored in git.
+services:
+  - type: web
+    name: finance-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /actuator/health
+    autoDeploy: false
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: AIVEN_CA_PEM
+        sync: false
+      - key: DEVICE_PAIRING_CODE
+        sync: false
+      - key: PAYLOAD_ENCRYPTION_KEY
+        sync: false
