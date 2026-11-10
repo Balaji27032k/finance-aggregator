@@ -1,0 +1,23 @@
+[Unit]
+Description=Finance Aggregator backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=finance
+Group=finance
+EnvironmentFile=/etc/finance-aggregator/env
+Environment=SPRING_PROFILES_ACTIVE=prod
+ExecStart=/usr/bin/java -Xms128m -Xmx512m -XX:+ExitOnOutOfMemoryError -jar /opt/finance-aggregator/app.jar
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadOnlyPaths=/etc/finance-aggregator
+
+[Install]
+WantedBy=multi-user.target

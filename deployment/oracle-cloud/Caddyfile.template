@@ -1,0 +1,21 @@
+__DOMAIN__ {
+	encode gzip
+
+	# Only the paths the phone and health checks need are exposed.
+	@allowed path /api/v1/* /actuator/health
+	handle @allowed {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle {
+		respond "Not found" 404
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

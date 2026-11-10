@@ -1,0 +1,4 @@
+# Production: only the local reverse proxy (Caddy) may reach the app, and it forwards the real client address.
+server:
+  address: 127.0.0.1
+  forward-headers-strategy: native

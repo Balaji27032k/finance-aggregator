@@ -11,7 +11,7 @@ spring:
       # Aiven small plans allow few connections.
       maximum-pool-size: 5
       data-source-properties:
-        trustCertificateKeyStoreUrl: file:///${DB_TRUSTSTORE_PATH}
+        trustCertificateKeyStoreUrl: file:${DB_TRUSTSTORE_PATH}
         trustCertificateKeyStoreType: PKCS12
         trustCertificateKeyStorePassword: ${DB_TRUSTSTORE_PASSWORD}
         connectionTimeZone: UTC
