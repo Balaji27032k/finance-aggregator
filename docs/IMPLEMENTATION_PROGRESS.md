@@ -3,8 +3,8 @@
 ## Phase status
 - [x] **Phase 0** Environment inspection, design docs, repo skeleton (no code; no tests applicable)
 - [~] Phase 1 Android foundation: notification capture verified on device by the user (real and test data stored)
-- [~] Phase 2 Spring Boot ingestion: built, 23 tests pass on H2; schema created by hand on Aiven MySQL; live end-to-end check pending (needs a network that can reach Aiven)
-- [~] Phase 3 Android cloud sync: built, 58 Android unit tests pass; needs live test against a reachable HTTPS backend
+- [~] Phase 2 Spring Boot ingestion: built, 27 tests pass on H2; deployed on Render and writing to Aiven MySQL (user-observed); duplicate and encrypted-at-rest checks on the live DB still to be confirmed
+- [~] Phase 3 Android cloud sync: built, 58 Android unit tests pass; paired and uploading to the Render backend from the phone (user-observed in the DB)
 - [~] Phase 4 SMS + historical scan: code built, 31 unit tests pass; on-device verification pending
 - [ ] Phase 5 Gmail
 - [ ] Phase 6 Normalization + dedup
@@ -44,6 +44,13 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - NOT executed: any real network call, WorkManager scheduling on a device, Keystore token storage, the pairing screen, behavior with no connectivity/airplane mode, reboot recovery. Real-device acceptance needs a reachable HTTPS backend.
 - Design notes: upload is triggered after each captured notification/SMS and after the history scan (WorkManager, network-constrained, not exact-time); a 15-minute periodic worker is a safety net. Device token is encrypted with an Android Keystore key. Only https:// backend URLs are accepted. The pairing code is never stored.
 
+## Render deployment (2026-11-10)
+- Free web service `finance-backend-9hjv` (Docker, 0.1 CPU/512 MB, sleeps after 15 min idle, cold start about 90 s), deployed manually from `master`.
+- Startup log verified: truststore import, TLS to Aiven MySQL, Flyway baseline at version 1, `Started FinanceAggregatorApplication`.
+- Failures met and fixed: a missing `PAYLOAD_ENCRYPTION_KEY` was used as the literal text `${...}` (now blank and rejected at startup); nested config validation did not run without `@Valid` (fixed, 4 tests added).
+- First phone sync timed out (30 s read timeout against per-event transactions on a 0.1 CPU instance). Fixed with 10-event batches and a 120 s read timeout; the user then saw rows arriving in MySQL.
+- RISK: the encryption key and pairing code in use were placeholders (all-zero key). Rows stored so far are protected only by that weak key and need re-encryption or deletion before real data is relied on.
+
 ## Decisions
 - Existing running Aiven MySQL is the source of truth (free MySQL tier is retired for new services).
 - Outbox-poller drives normalization; Kafka is an optional sink added in Phase 7.
@@ -56,5 +63,6 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - Aiven Kafka free tier powers off when idle.
 
 ## Next actions
-1. Install the debug APK on the phone and run the Phase 1 acceptance test.
-2. Fix issues found, then start Phase 2 (Spring Boot ingestion) after approval.
+1. Replace the placeholder encryption key and pairing code, and decide what to do with rows already stored under the old key.
+2. Confirm on the live DB that payloads start with `v1:` and each event has an outbox row.
+3. Phase 6 (parsers) needs redacted real message examples; wait for approval before starting.
