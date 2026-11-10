@@ -130,7 +130,8 @@ class UploadRunner(
     }
 
     companion object {
-        const val BATCH_SIZE = 50
+        // The backend commits one transaction per event over a remote database, so large batches outlast the timeout.
+        const val BATCH_SIZE = 10
         const val UNAUTHORIZED = "unauthorized"
     }
 }

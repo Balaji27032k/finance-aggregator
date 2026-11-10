@@ -57,8 +57,9 @@ class AppContainer(context: Context) {
         Room.databaseBuilder(context, FinanceDatabase::class.java, FinanceDatabase.NAME).build()
     val api = com.personal.financecollector.sync.BackendApi(
         okhttp3.OkHttpClient.Builder()
-            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            // Render's free tier needs up to ~90s to wake from idle.
+            .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
             .build(),
     )
     val credentials = com.personal.financecollector.security.SecureCredentialStore(db.configDao())

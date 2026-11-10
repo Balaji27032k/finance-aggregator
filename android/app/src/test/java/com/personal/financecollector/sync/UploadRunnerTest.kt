@@ -159,11 +159,11 @@ class UploadRunnerTest {
     }
 
     @Test
-    fun largeBacklogsAreSentInBatchesOfFifty() = runBlocking {
-        (1..120).forEach { store.add(testEvent("e$it", capturedAt = it.toLong())) }
+    fun largeBacklogsAreSentInBatchesOfTen() = runBlocking {
+        (1..25).forEach { store.add(testEvent("e$it", capturedAt = it.toLong())) }
         val api = FakeApi(ackAll())
         assertEquals(RunResult.Idle, runner(api).run())
-        assertEquals(listOf(50, 50, 20), api.calls.map { it.size })
+        assertEquals(listOf(10, 10, 5), api.calls.map { it.size })
         assertTrue(store.rows.values.all { it.status == UploadStatus.SYNCED })
     }
 
