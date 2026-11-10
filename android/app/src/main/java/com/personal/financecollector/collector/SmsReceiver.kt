@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import com.personal.financecollector.FinanceApp
+import com.personal.financecollector.sync.UploadScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,7 +26,7 @@ class SmsReceiver : BroadcastReceiver() {
         val db = (context.applicationContext as FinanceApp).container.db
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                SmsIngestor(db).ingest(sender, body, timestamp)
+                SmsIngestor(db) { UploadScheduler.enqueueNow(context.applicationContext) }.ingest(sender, body, timestamp)
             } finally {
                 pending.finish()
             }

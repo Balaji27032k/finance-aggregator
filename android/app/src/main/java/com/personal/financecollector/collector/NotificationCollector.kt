@@ -12,6 +12,7 @@ import com.personal.financecollector.database.FinanceDatabase
 import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.SourceType
 import com.personal.financecollector.database.UploadStatus
+import com.personal.financecollector.sync.UploadScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -112,7 +113,10 @@ class NotificationCollector : NotificationListenerService() {
                 uploadStatus = UploadStatus.PENDING,
             ),
         )
-        if (inserted) db.statusDao().setLastEvent(StatusKeys.NOTIFICATION_LISTENER, now)
+        if (inserted) {
+            db.statusDao().setLastEvent(StatusKeys.NOTIFICATION_LISTENER, now)
+            UploadScheduler.enqueueNow(applicationContext)
+        }
     }
 
     private fun extract(n: Notification): NotificationContent {

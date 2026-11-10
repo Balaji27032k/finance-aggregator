@@ -3,6 +3,7 @@ package com.personal.financecollector.ui
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
@@ -23,7 +24,10 @@ import com.personal.financecollector.database.set
 import com.personal.financecollector.service.CollectionHealth
 import com.personal.financecollector.service.SmsScanState
 import com.personal.financecollector.service.SourceHealth
+import com.personal.financecollector.sync.BackendApi
+import com.personal.financecollector.sync.RegisterOutcome
 import com.personal.financecollector.sync.SmsScanScheduler
+import com.personal.financecollector.sync.UploadScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,9 +52,20 @@ data class SmsScanUi(
     val lastEventAt: Long?,
 )
 
+data class CloudUi(
+    val health: SourceHealth,
+    val paired: Boolean,
+    val backendUrl: String?,
+    val deviceId: String?,
+    val lastOkAt: Long?,
+    val pending: Int,
+    val needsAttention: Int,
+)
+
 data class HealthUiState(
     val notification: SourceHealth,
     val sms: SmsScanUi,
+    val cloud: CloudUi,
     val unavailableSources: List<SourceHealth>,
     val enabledApps: List<String>,
     val lastEventAt: Long?,
@@ -89,6 +104,8 @@ private data class Core(
 )
 
 private data class SmsConfig(val state: String?, val scanned: String?, val captured: String?, val months: String?, val error: String?)
+
+private data class CloudConfig(val url: String?, val paired: String?, val deviceId: String?, val lastOk: String?, val error: String?)
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val db = (app as FinanceApp).container.db
@@ -161,14 +178,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val smsDroppedFiltered = db.statusDao().observe(StatusKeys.SMS).map { it?.droppedFiltered ?: 0 }
 
-    val health: StateFlow<HealthUiState?> = combine(core, smsUi, smsDroppedFiltered) { c, sms, smsFiltered ->
+    val pairingMessage = MutableStateFlow<String?>(null)
+
+    private val cloudConfig = combine(
+        db.configDao().observe(ConfigKeys.BACKEND_URL),
+        db.configDao().observe(ConfigKeys.PAIRED),
+        db.configDao().observe(ConfigKeys.DEVICE_ID),
+        db.configDao().observe(ConfigKeys.SYNC_LAST_OK_AT),
+        db.configDao().observe(ConfigKeys.SYNC_LAST_ERROR),
+    ) { url, paired, deviceId, lastOk, error -> CloudConfig(url, paired, deviceId, lastOk, error) }
+
+    private val cloudUi = combine(cloudConfig, counts) { cfg, c ->
+        val isPaired = cfg.paired == "true"
+        val lastOk = cfg.lastOk?.toLongOrNull()
+        CloudUi(
+            health = CollectionHealth.cloud(isPaired, c.pending, lastOk, cfg.error?.takeIf { it.isNotBlank() }),
+            paired = isPaired,
+            backendUrl = cfg.url,
+            deviceId = cfg.deviceId,
+            lastOkAt = lastOk,
+            pending = c.pending,
+            needsAttention = c.failed,
+        )
+    }
+
+    val health: StateFlow<HealthUiState?> = combine(core, smsUi, smsDroppedFiltered, cloudUi) { c, sms, smsFiltered, cloud ->
         HealthUiState(
             notification = c.notification,
             sms = sms,
-            unavailableSources = listOf(
-                CollectionHealth.notImplemented("Gmail", 5),
-                CollectionHealth.notImplemented("Cloud API", 3),
-            ),
+            cloud = cloud,
+            unavailableSources = listOf(CollectionHealth.notImplemented("Gmail", 5)),
             enabledApps = c.enabledApps,
             lastEventAt = listOfNotNull(c.notificationLastEvent, sms.lastEventAt).maxOrNull(),
             lastUploadAt = c.lastUpload,
@@ -187,6 +226,62 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshSystemState() = tick.update { it + 1 }
+
+    /** The pairing code is used once for registration and never stored. */
+    fun pair(backendUrl: String, pairingCode: String) {
+        viewModelScope.launch {
+            val container = (getApplication<Application>() as FinanceApp).container
+            val normalized = BackendApi.normalizeBaseUrl(backendUrl)
+            if (normalized == null) {
+                pairingMessage.value = "Enter an https:// address"
+                return@launch
+            }
+            if (pairingCode.isBlank()) {
+                pairingMessage.value = "Enter the pairing code"
+                return@launch
+            }
+            pairingMessage.value = "Pairing..."
+            val ctx = getApplication<Application>()
+            val version = ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "unknown"
+            when (val result = container.api.register(normalized, pairingCode.trim(), "${Build.MANUFACTURER} ${Build.MODEL}", version)) {
+                is RegisterOutcome.Registered -> {
+                    container.credentials.saveToken(result.token)
+                    db.configDao().set(ConfigKeys.BACKEND_URL, normalized)
+                    db.configDao().set(ConfigKeys.DEVICE_ID, result.deviceId.toString())
+                    db.configDao().set(ConfigKeys.PAIRED, "true")
+                    db.configDao().set(ConfigKeys.SYNC_LAST_ERROR, "")
+                    pairingMessage.value = "Paired. Uploading queued events."
+                    UploadScheduler.enqueueNow(ctx)
+                }
+                RegisterOutcome.BadPairingCode -> pairingMessage.value = "The pairing code was not accepted"
+                is RegisterOutcome.Failed -> pairingMessage.value = result.reason
+            }
+        }
+    }
+
+    /** Forgets the credentials; captured events stay on the phone and upload after the next pairing. */
+    fun unpair() {
+        viewModelScope.launch {
+            val container = (getApplication<Application>() as FinanceApp).container
+            container.credentials.clear()
+            db.configDao().set(ConfigKeys.PAIRED, "false")
+            pairingMessage.value = null
+        }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch {
+            db.eventDao().resetBackoff(System.currentTimeMillis())
+            UploadScheduler.enqueueNow(getApplication())
+        }
+    }
+
+    fun retryFailed() {
+        viewModelScope.launch {
+            db.eventDao().requeueFailed(System.currentTimeMillis())
+            UploadScheduler.enqueueNow(getApplication())
+        }
+    }
 
     fun setPaused(paused: Boolean) {
         viewModelScope.launch { db.configDao().set(ConfigKeys.COLLECTION_PAUSED, paused.toString()) }

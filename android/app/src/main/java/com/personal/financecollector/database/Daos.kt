@@ -41,7 +41,7 @@ abstract class EventDao {
     @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('PENDING','UPLOADING','RETRY')")
     abstract fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus = 'FAILED_PERMANENTLY'")
+    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('FAILED_PERMANENTLY','NEEDS_REVIEW')")
     abstract fun observeFailedCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM raw_financial_events WHERE parserStatus = 'NEEDS_REVIEW'")
@@ -55,6 +55,82 @@ abstract class EventDao {
 
     @Query("DELETE FROM raw_financial_events")
     abstract suspend fun deleteAllEvents()
+
+    @Query(
+        "SELECT e.* FROM raw_financial_events e INNER JOIN pending_uploads p ON p.localEventId = e.localEventId " +
+            "WHERE e.uploadStatus IN ('PENDING','RETRY') AND p.nextAttemptAt <= :now " +
+            "ORDER BY e.capturedTimestamp ASC LIMIT :limit",
+    )
+    abstract suspend fun dueForUpload(now: Long, limit: Int): List<RawFinancialEventEntity>
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'UPLOADING' WHERE localEventId IN (:ids)")
+    abstract suspend fun markUploading(ids: List<String>)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'SYNCED', ackTimestamp = :ackAt, lastError = NULL WHERE localEventId = :id")
+    abstract suspend fun markSynced(id: String, ackAt: Long)
+
+    @Query("DELETE FROM pending_uploads WHERE localEventId = :id")
+    abstract suspend fun deletePending(id: String)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = :status, lastError = :error WHERE localEventId = :id")
+    abstract suspend fun setUploadResult(id: String, status: UploadStatus, error: String?)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'RETRY', retryCount = retryCount + 1, lastError = :error WHERE localEventId = :id")
+    abstract suspend fun markRetry(id: String, error: String)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'PENDING' WHERE localEventId IN (:ids)")
+    abstract suspend fun revertToPending(ids: List<String>)
+
+    /** Only one upload worker runs at a time, so any UPLOADING row at the start of a run is left over from a killed run. */
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'RETRY' WHERE uploadStatus = 'UPLOADING'")
+    abstract suspend fun resetUploading()
+
+    @Query("SELECT attempts FROM pending_uploads WHERE localEventId = :id")
+    abstract suspend fun attemptsOf(id: String): Int?
+
+    @Query("UPDATE pending_uploads SET attempts = attempts + 1, nextAttemptAt = :next WHERE localEventId = :id")
+    abstract suspend fun scheduleRetry(id: String, next: Long)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'PENDING', retryCount = 0, lastError = NULL WHERE uploadStatus IN ('FAILED_PERMANENTLY','NEEDS_REVIEW')")
+    abstract suspend fun requeueFailedEvents()
+
+    @Query(
+        "UPDATE pending_uploads SET attempts = 0, nextAttemptAt = :now WHERE localEventId IN " +
+            "(SELECT localEventId FROM raw_financial_events WHERE uploadStatus IN ('PENDING','RETRY'))",
+    )
+    abstract suspend fun resetBackoff(now: Long)
+
+    @Query(
+        "SELECT MIN(p.nextAttemptAt) FROM pending_uploads p INNER JOIN raw_financial_events e " +
+            "ON e.localEventId = p.localEventId WHERE e.uploadStatus IN ('PENDING','RETRY')",
+    )
+    abstract suspend fun minNextAttemptAt(): Long?
+
+    @Query(
+        "INSERT OR IGNORE INTO pending_uploads (localEventId, enqueuedAt, nextAttemptAt, attempts) " +
+            "SELECT localEventId, :now, :now, 0 FROM raw_financial_events " +
+            "WHERE uploadStatus IN ('FAILED_PERMANENTLY','NEEDS_REVIEW')",
+    )
+    abstract suspend fun enqueueFailedForRetry(now: Long)
+
+    @Transaction
+    open suspend fun requeueFailed(now: Long) {
+        enqueueFailedForRetry(now)
+        requeueFailedEvents()
+        resetBackoff(now)
+    }
+
+    @Transaction
+    open suspend fun acknowledge(id: String, ackAt: Long) {
+        markSynced(id, ackAt)
+        deletePending(id)
+    }
+
+    @Transaction
+    open suspend fun finishWithStatus(id: String, status: UploadStatus, reason: String) {
+        setUploadResult(id, status, reason)
+        deletePending(id)
+    }
 }
 
 @Dao

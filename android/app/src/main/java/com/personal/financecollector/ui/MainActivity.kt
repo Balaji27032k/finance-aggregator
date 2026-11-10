@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
                 smsPermission.launch(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
             },
             rescanSms = viewModel::rescanSms,
+            pair = viewModel::pair,
+            unpair = viewModel::unpair,
+            syncNow = viewModel::syncNow,
+            retryFailed = viewModel::retryFailed,
         )
         setContent {
             MaterialTheme {
@@ -83,6 +87,7 @@ class MainActivity : ComponentActivity() {
                 val sources by viewModel.sources.collectAsStateWithLifecycle()
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
                 val apps by viewModel.installedApps.collectAsStateWithLifecycle()
+                val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
 
                 Scaffold(
                     bottomBar = {
@@ -95,7 +100,7 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     val body = Modifier.padding(padding)
                     when (tab) {
-                        0 -> HealthScreen(health, actions, body)
+                        0 -> HealthScreen(health, pairingMessage, actions, body)
                         1 -> EventsScreen(events, body)
                         else -> SourcesScreen(
                             apps = apps,

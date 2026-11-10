@@ -10,7 +10,7 @@ import java.util.UUID
 
 enum class SmsIngestResult { CAPTURED, DUPLICATE, PAUSED, SENDER_NOT_ALLOWED, FILTERED }
 
-class SmsIngestor(private val db: FinanceDatabase) {
+class SmsIngestor(private val db: FinanceDatabase, private val onCaptured: () -> Unit = {}) {
 
     suspend fun loadRules(): SmsRules = SmsRules(
         paused = db.configDao().get(ConfigKeys.COLLECTION_PAUSED) == "true",
@@ -62,6 +62,7 @@ class SmsIngestor(private val db: FinanceDatabase) {
         if (!inserted) return SmsIngestResult.DUPLICATE
         status.ensure(StatusKeys.SMS)
         status.setLastEvent(StatusKeys.SMS, now)
+        onCaptured()
         return SmsIngestResult.CAPTURED
     }
 

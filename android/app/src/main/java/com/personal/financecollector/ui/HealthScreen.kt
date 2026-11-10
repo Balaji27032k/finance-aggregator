@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.personal.financecollector.service.SmsScanState
 import com.personal.financecollector.service.SourceHealth
@@ -44,6 +46,10 @@ data class HealthActions(
     val deleteLocalData: () -> Unit,
     val requestSmsPermission: () -> Unit,
     val rescanSms: (Int) -> Unit,
+    val pair: (String, String) -> Unit,
+    val unpair: () -> Unit,
+    val syncNow: () -> Unit,
+    val retryFailed: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -58,7 +64,7 @@ private fun stateColor(state: SourceState): Color = when (state) {
 }
 
 @Composable
-fun HealthScreen(state: HealthUiState?, actions: HealthActions, modifier: Modifier = Modifier) {
+fun HealthScreen(state: HealthUiState?, pairingMessage: String?, actions: HealthActions, modifier: Modifier = Modifier) {
     if (state == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
@@ -104,6 +110,8 @@ fun HealthScreen(state: HealthUiState?, actions: HealthActions, modifier: Modifi
 
         item { SmsCard(state.sms, actions) }
 
+        item { CloudCard(state.cloud, pairingMessage, actions) }
+
         items(state.unavailableSources) { SourceCard(it) {} }
 
         item {
@@ -112,7 +120,7 @@ fun HealthScreen(state: HealthUiState?, actions: HealthActions, modifier: Modifi
                     Text("Capture", style = MaterialTheme.typography.titleMedium)
                     Text("Enabled apps: ${state.enabledApps.ifEmpty { listOf("none") }.joinToString()}")
                     Text("Last event captured: ${formatTime(state.lastEventAt)}")
-                    Text("Last successful upload: ${if (state.lastUploadAt == null) "none (cloud sync not built yet)" else formatTime(state.lastUploadAt)}")
+                    Text("Last successful upload: ${formatTime(state.lastUploadAt)}")
                     Text("Pending upload: ${state.pending}")
                     Text("Failed upload: ${state.failed}")
                     Text("Needs review (parser): ${state.parserNeedsReview}")
@@ -148,6 +156,43 @@ fun HealthScreen(state: HealthUiState?, actions: HealthActions, modifier: Modifi
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun CloudCard(cloud: CloudUi, pairingMessage: String?, actions: HealthActions) {
+    var url by remember { mutableStateOf(cloud.backendUrl.orEmpty()) }
+    var code by remember { mutableStateOf("") }
+    SourceCard(cloud.health) {
+        if (!cloud.paired) {
+            OutlinedTextField(
+                value = url,
+                onValueChange = { url = it },
+                label = { Text("Backend address (https://...)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = code,
+                onValueChange = { code = it },
+                label = { Text("Pairing code") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(onClick = { actions.pair(url, code); code = "" }) { Text("Pair") }
+            pairingMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        } else {
+            Text("Backend: ${cloud.backendUrl}  (device ${cloud.deviceId})", style = MaterialTheme.typography.bodySmall)
+            Text("Last successful upload: ${formatTime(cloud.lastOkAt)}", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = actions.syncNow) { Text("Sync now") }
+                if (cloud.needsAttention > 0) {
+                    OutlinedButton(onClick = actions.retryFailed) { Text("Retry ${cloud.needsAttention} failed") }
+                }
+            }
+            TextButton(onClick = actions.unpair) { Text("Unpair") }
+        }
     }
 }
 

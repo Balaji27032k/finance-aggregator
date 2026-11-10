@@ -40,6 +40,18 @@ object CollectionHealth {
         }
     }
 
+    fun cloud(paired: Boolean, pending: Int, lastOkAt: Long?, lastError: String?): SourceHealth {
+        val name = "Cloud sync"
+        return when {
+            !paired -> SourceHealth(name, SourceState.DISCONNECTED, "Not paired with a backend")
+            lastError == "unauthorized" -> SourceHealth(name, SourceState.ERROR, "The backend rejected this device. Pair again.")
+            !lastError.isNullOrBlank() -> SourceHealth(name, SourceState.ERROR, "Last upload failed ($lastError); $pending event(s) waiting and will retry")
+            pending > 0 -> SourceHealth(name, SourceState.SYNC_PENDING, "$pending event(s) waiting to upload")
+            lastOkAt == null -> SourceHealth(name, SourceState.SYNC_PENDING, "Paired; nothing uploaded yet")
+            else -> SourceHealth(name, SourceState.ACTIVE, "All captured events are uploaded")
+        }
+    }
+
     fun notImplemented(name: String, phase: Int) =
         SourceHealth(name, SourceState.DISABLED, "Not implemented yet (Phase $phase)")
 }

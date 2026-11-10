@@ -50,7 +50,9 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.androidx.work.runtime)
+    implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

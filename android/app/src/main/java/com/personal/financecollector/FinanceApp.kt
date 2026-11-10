@@ -17,6 +17,13 @@ object ConfigKeys {
     const val SMS_SCAN_SCANNED = "sms_scan_scanned"
     const val SMS_SCAN_CAPTURED = "sms_scan_captured"
     const val SMS_SCAN_ERROR = "sms_scan_error"
+    const val BACKEND_URL = "backend_url"
+    const val PAIRED = "paired"
+    const val DEVICE_ID = "device_id"
+    const val DEVICE_TOKEN_ENC = "device_token_enc"
+    const val SYNC_LAST_OK_AT = "sync_last_ok_at"
+    const val SYNC_LAST_ATTEMPT_AT = "sync_last_attempt_at"
+    const val SYNC_LAST_ERROR = "sync_last_error"
     val SMS_SCAN_KEYS = listOf(SMS_SCAN_STATE, SMS_SCAN_SCANNED, SMS_SCAN_CAPTURED, SMS_SCAN_ERROR)
     const val DEFAULT_SMS_SCAN_MONTHS = 12
 }
@@ -48,6 +55,13 @@ object KnownApps {
 class AppContainer(context: Context) {
     val db: FinanceDatabase =
         Room.databaseBuilder(context, FinanceDatabase::class.java, FinanceDatabase.NAME).build()
+    val api = com.personal.financecollector.sync.BackendApi(
+        okhttp3.OkHttpClient.Builder()
+            .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build(),
+    )
+    val credentials = com.personal.financecollector.security.SecureCredentialStore(db.configDao())
 }
 
 class FinanceApp : Application() {
@@ -57,6 +71,7 @@ class FinanceApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        com.personal.financecollector.sync.UploadScheduler.ensurePeriodic(this)
         // Only package names that are certain are seeded; other banks are chosen in Manage Sources.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             container.db.sourceDao().insertIgnore(

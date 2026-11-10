@@ -24,6 +24,7 @@ class HistoricalSmsScanWorker(context: Context, params: WorkerParameters) : Coro
 
         return try {
             SmsHistoryScanner(applicationContext, db).scan()
+            UploadScheduler.enqueueNow(applicationContext)
             Result.success()
         } catch (e: CancellationException) {
             throw e

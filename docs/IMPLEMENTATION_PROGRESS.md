@@ -4,7 +4,7 @@
 - [x] **Phase 0** Environment inspection, design docs, repo skeleton (no code; no tests applicable)
 - [~] Phase 1 Android foundation: notification capture verified on device by the user (real and test data stored)
 - [~] Phase 2 Spring Boot ingestion: built, 23 tests pass on H2; schema created by hand on Aiven MySQL; live end-to-end check pending (needs a network that can reach Aiven)
-- [ ] Phase 3 Android cloud sync
+- [~] Phase 3 Android cloud sync: built, 58 Android unit tests pass; needs live test against a reachable HTTPS backend
 - [~] Phase 4 SMS + historical scan: code built, 31 unit tests pass; on-device verification pending
 - [ ] Phase 5 Gmail
 - [ ] Phase 6 Normalization + dedup
@@ -37,6 +37,12 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - Pending acceptance: start the app on a network that reaches Aiven, register a device, ingest an event twice, and read the encrypted row back from MySQL.
 - Not built yet from the original API list: GET /events/pending, POST /events/{id}/reprocess, /sync/*, health/sources, health/sync.
 - Maven wrapper could not download Maven (slow network); local Maven 3.9.16 is used.
+
+## Phase 3 verification
+- Executed: `gradlew assembleDebug testDebugUnitTest` -> BUILD SUCCESSFUL, 58 tests, 0 failures (new: UploadRunnerTest 12, BackoffAndApiTest 9, CloudHealthTest 6).
+- Covered by fakes: unpaired -> nothing sent; ACCEPTED/DUPLICATE -> SYNCED only after ack; backend outage -> events stay queued (RETRY) with 15-30s first backoff, doubling, capped at 6h, jittered; recovery uploads the same events; 401 -> events return to PENDING, none lost; REJECTED -> NEEDS_REVIEW; missing ack -> retry; leftover UPLOADING reset after a kill; 4xx -> FAILED_PERMANENTLY (kept, retryable by button); 50-event batches, oldest first; request/response JSON matches the backend contract.
+- NOT executed: any real network call, WorkManager scheduling on a device, Keystore token storage, the pairing screen, behavior with no connectivity/airplane mode, reboot recovery. Real-device acceptance needs a reachable HTTPS backend.
+- Design notes: upload is triggered after each captured notification/SMS and after the history scan (WorkManager, network-constrained, not exact-time); a 15-minute periodic worker is a safety net. Device token is encrypted with an Android Keystore key. Only https:// backend URLs are accepted. The pairing code is never stored.
 
 ## Decisions
 - Existing running Aiven MySQL is the source of truth (free MySQL tier is retired for new services).
