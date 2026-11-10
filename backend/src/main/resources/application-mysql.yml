@@ -21,5 +21,6 @@ spring:
 
 app:
   security:
-    pairing-code: ${DEVICE_PAIRING_CODE}
-    payload-encryption-key: ${PAYLOAD_ENCRYPTION_KEY}
+    # Empty default: a missing variable fails validation at startup instead of becoming the literal text "${NAME}".
+    pairing-code: ${DEVICE_PAIRING_CODE:}
+    payload-encryption-key: ${PAYLOAD_ENCRYPTION_KEY:}

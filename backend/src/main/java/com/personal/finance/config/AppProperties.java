@@ -1,5 +1,6 @@
 package com.personal.finance.config;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 
 @Validated
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Security security, RateLimit rateLimit) {
+public record AppProperties(@Valid Security security, @Valid RateLimit rateLimit) {
 
     public record Security(
             @NotBlank @Size(min = 12) String pairingCode,
