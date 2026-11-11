@@ -46,36 +46,34 @@ private fun describe(p: ExportProgressUi, totalLabel: Boolean): String {
 
 @Composable
 fun ExportCard(export: ExportUi, actions: HealthActions) {
-    Card {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Analysis export (hidden tool)", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Copies full message text into a separate table so message formats can be studied. " +
-                    "Personal-number SMS senders are skipped and OTP digits are masked.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            if (!export.paired) {
-                Text("Pair this phone with the backend first.", style = MaterialTheme.typography.bodySmall)
-                return@Column
-            }
-            Text("SMS", style = MaterialTheme.typography.titleSmall)
-            Text(describe(export.sms, false), style = MaterialTheme.typography.bodySmall)
-            Button(onClick = actions.fetchAllSms, enabled = export.sms.state != ExportState.RUNNING) { Text("Fetch all SMS") }
-
-            Text("Gmail", style = MaterialTheme.typography.titleSmall)
-            Text(describe(export.mail, true), style = MaterialTheme.typography.bodySmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (!export.gmailConnected) {
-                    Button(onClick = actions.connectGmail) { Text("Connect Gmail") }
-                } else {
-                    Button(onClick = actions.fetchGmail, enabled = export.mail.state != ExportState.RUNNING) { Text("Fetch Gmail") }
-                    OutlinedButton(onClick = actions.connectGmail) { Text("Reconnect") }
-                }
-            }
-            export.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            Text("Captured notifications", style = MaterialTheme.typography.titleSmall)
-            Text(describe(export.notif, false), style = MaterialTheme.typography.bodySmall)
-            Button(onClick = actions.fetchNotifications, enabled = export.notif.state != ExportState.RUNNING) { Text("Send captured notifications") }
+    Panel {
+        Text("Analysis export (hidden tool)", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Copies full message text into a separate table so message formats can be studied. " +
+                "Personal-number SMS senders are skipped and OTP digits are masked.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (!export.paired) {
+            Text("Pair this phone with the backend first.", style = MaterialTheme.typography.bodySmall)
+            return@Panel
         }
+        Text("SMS", style = MaterialTheme.typography.titleSmall)
+        Text(describe(export.sms, false), style = MaterialTheme.typography.bodySmall)
+        Button(onClick = actions.fetchAllSms, enabled = export.sms.state != ExportState.RUNNING) { Text("Fetch all SMS") }
+
+        Text("Gmail", style = MaterialTheme.typography.titleSmall)
+        Text(describe(export.mail, true), style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!export.gmailConnected) {
+                Button(onClick = actions.connectGmail) { Text("Connect Gmail") }
+            } else {
+                Button(onClick = actions.fetchGmail, enabled = export.mail.state != ExportState.RUNNING) { Text("Fetch Gmail") }
+                OutlinedButton(onClick = actions.connectGmail) { Text("Reconnect") }
+            }
+        }
+        export.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        Text("Captured notifications", style = MaterialTheme.typography.titleSmall)
+        Text(describe(export.notif, false), style = MaterialTheme.typography.bodySmall)
+        Button(onClick = actions.fetchNotifications, enabled = export.notif.state != ExportState.RUNNING) { Text("Send captured notifications") }
     }
 }

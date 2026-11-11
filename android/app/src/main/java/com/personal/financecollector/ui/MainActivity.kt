@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
@@ -115,6 +116,7 @@ class MainActivity : ComponentActivity() {
             fetchGmail = viewModel::fetchGmail,
             fetchNotifications = viewModel::fetchNotifications,
             checkGmail = viewModel::checkGmailNow,
+            openSources = {},
         )
         setContent {
             FinanceTheme {
@@ -129,6 +131,8 @@ class MainActivity : ComponentActivity() {
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
+                val screenActions = actions.copy(openSources = { tab = 4 })
+                BackHandler(enabled = tab == 4) { tab = 3 }
 
                 Scaffold(
                     bottomBar = {
@@ -136,7 +140,7 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview") })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions") })
                             NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity") })
-                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health") })
+                            NavigationBarItem(tab == 3 || tab == 4, { tab = 3 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health") })
                         }
                     },
                 ) { padding ->
@@ -145,7 +149,7 @@ class MainActivity : ComponentActivity() {
                         0 -> OverviewScreen(ledger, onOpen, onSeeAll = { tab = 1 }, modifier = body)
                         1 -> TransactionsScreen(ledger, onOpen, body)
                         2 -> EventsScreen(events, body)
-                        3 -> HealthScreen(health, pairingMessage, export, actions, body)
+                        3 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         else -> SourcesScreen(
                             apps = apps,
                             appSources = sources,
