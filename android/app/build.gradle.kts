@@ -51,6 +51,7 @@ dependencies {
 
     implementation(libs.androidx.work.runtime)
     implementation(libs.okhttp)
+    implementation(libs.play.services.auth)
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)

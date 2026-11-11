@@ -21,6 +21,9 @@ import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.SourceCheckpointEntity
 import com.personal.financecollector.database.SourceType
 import com.personal.financecollector.database.set
+import com.personal.financecollector.export.ExportProgress
+import com.personal.financecollector.export.ExportScheduler
+import com.personal.financecollector.export.ExportState
 import com.personal.financecollector.service.CollectionHealth
 import com.personal.financecollector.service.SmsScanState
 import com.personal.financecollector.service.SourceHealth
@@ -207,7 +210,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             notification = c.notification,
             sms = sms,
             cloud = cloud,
-            unavailableSources = listOf(CollectionHealth.notImplemented("Gmail", 5)),
+            unavailableSources = emptyList(),
             enabledApps = c.enabledApps,
             lastEventAt = listOfNotNull(c.notificationLastEvent, sms.lastEventAt).maxOrNull(),
             lastUploadAt = c.lastUpload,
@@ -288,6 +291,53 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             db.eventDao().resendAll(System.currentTimeMillis())
             UploadScheduler.enqueueNow(getApplication())
         }
+    }
+
+    private fun exportProgress(name: String) = combine(
+        listOf("state", "seen", "uploaded", "skipped", "total", "error").map { db.configDao().observe("export_${name}_$it") },
+    ) { v ->
+        ExportProgressUi(
+            state = v[0], seen = v[1]?.toLongOrNull() ?: 0, uploaded = v[2]?.toLongOrNull() ?: 0,
+            skipped = v[3]?.toLongOrNull() ?: 0, total = v[4]?.toLongOrNull() ?: 0, error = v[5],
+        )
+    }
+
+    private val exportMessage = MutableStateFlow<String?>(null)
+
+    val export: StateFlow<ExportUi> = combine(
+        db.configDao().observe(ConfigKeys.PAIRED),
+        exportProgress("sms"),
+        exportProgress("mail"),
+        db.configDao().observe(ConfigKeys.GMAIL_CONNECTED),
+        exportMessage,
+    ) { paired, sms, mail, gmail, message -> ExportUi(paired == "true", sms, mail, gmail == "true", message) }
+        .stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5000),
+            ExportUi(false, ExportProgressUi(null, 0, 0, 0, 0, null), ExportProgressUi(null, 0, 0, 0, 0, null), false, null),
+        )
+
+    fun fetchAllSms() {
+        exportMessage.value = null
+        ExportScheduler.enqueueSms(getApplication())
+    }
+
+    /** A finished export starts again from the newest mail; an interrupted one resumes where it stopped. */
+    fun fetchGmail() {
+        viewModelScope.launch {
+            val progress = ExportProgress(db.configDao(), "mail")
+            if (progress.text(ExportProgress.STATE) in listOf(null, "", ExportState.COMPLETE)) progress.reset()
+            exportMessage.value = null
+            ExportScheduler.enqueueGmail(getApplication())
+        }
+    }
+
+    fun gmailConnected(connected: Boolean, message: String? = null) {
+        viewModelScope.launch { db.configDao().set(ConfigKeys.GMAIL_CONNECTED, connected.toString()) }
+        exportMessage.value = message
+    }
+
+    fun showExportMessage(message: String) {
+        exportMessage.value = message
     }
 
     fun setPaused(paused: Boolean) {

@@ -51,6 +51,9 @@ data class HealthActions(
     val syncNow: () -> Unit,
     val retryFailed: () -> Unit,
     val resendAll: () -> Unit,
+    val fetchAllSms: () -> Unit,
+    val connectGmail: () -> Unit,
+    val fetchGmail: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -65,7 +68,13 @@ private fun stateColor(state: SourceState): Color = when (state) {
 }
 
 @Composable
-fun HealthScreen(state: HealthUiState?, pairingMessage: String?, actions: HealthActions, modifier: Modifier = Modifier) {
+fun HealthScreen(
+    state: HealthUiState?,
+    pairingMessage: String?,
+    export: ExportUi,
+    actions: HealthActions,
+    modifier: Modifier = Modifier,
+) {
     if (state == null) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         return
@@ -112,6 +121,8 @@ fun HealthScreen(state: HealthUiState?, pairingMessage: String?, actions: Health
         item { SmsCard(state.sms, actions) }
 
         item { CloudCard(state.cloud, pairingMessage, actions) }
+
+        item { ExportCard(export, actions) }
 
         items(state.unavailableSources) { SourceCard(it) {} }
 

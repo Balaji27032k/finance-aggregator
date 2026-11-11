@@ -15,6 +15,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.personal.financecollector.collector.NotificationCollector
+import com.personal.financecollector.export.GmailAuth
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
 
 class MainActivity : ComponentActivity() {
 
@@ -53,6 +57,32 @@ class MainActivity : ComponentActivity() {
             viewModel.refreshSystemState()
             viewModel.ensureSmsScan()
         }
+
+    private val gmailConsent =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            try {
+                Identity.getAuthorizationClient(this).getAuthorizationResultFromIntent(result.data)
+                viewModel.gmailConnected(true)
+            } catch (e: ApiException) {
+                viewModel.gmailConnected(false, "Gmail sign-in was not completed (code ${e.statusCode})")
+            }
+        }
+
+    private fun connectGmail() {
+        Identity.getAuthorizationClient(this).authorize(GmailAuth.request)
+            .addOnSuccessListener { r ->
+                val pending = r.pendingIntent
+                if (r.hasResolution() && pending != null) {
+                    gmailConsent.launch(IntentSenderRequest.Builder(pending.intentSender).build())
+                } else {
+                    viewModel.gmailConnected(true)
+                }
+            }
+            .addOnFailureListener {
+                val code = (it as? ApiException)?.statusCode
+                viewModel.showExportMessage("Gmail sign-in failed: ${it.javaClass.simpleName}${code?.let { c -> " (code $c)" }.orEmpty()}")
+            }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +109,9 @@ class MainActivity : ComponentActivity() {
             syncNow = viewModel::syncNow,
             retryFailed = viewModel::retryFailed,
             resendAll = viewModel::resendAll,
+            fetchAllSms = viewModel::fetchAllSms,
+            connectGmail = ::connectGmail,
+            fetchGmail = viewModel::fetchGmail,
         )
         setContent {
             MaterialTheme {
@@ -89,6 +122,7 @@ class MainActivity : ComponentActivity() {
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
                 val apps by viewModel.installedApps.collectAsStateWithLifecycle()
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
+                val export by viewModel.export.collectAsStateWithLifecycle()
 
                 Scaffold(
                     bottomBar = {
@@ -101,7 +135,7 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     val body = Modifier.padding(padding)
                     when (tab) {
-                        0 -> HealthScreen(health, pairingMessage, actions, body)
+                        0 -> HealthScreen(health, pairingMessage, export, actions, body)
                         1 -> EventsScreen(events, body)
                         else -> SourcesScreen(
                             apps = apps,

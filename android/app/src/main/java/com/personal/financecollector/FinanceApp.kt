@@ -24,6 +24,7 @@ object ConfigKeys {
     const val SYNC_LAST_OK_AT = "sync_last_ok_at"
     const val SYNC_LAST_ATTEMPT_AT = "sync_last_attempt_at"
     const val SYNC_LAST_ERROR = "sync_last_error"
+    const val GMAIL_CONNECTED = "gmail_connected"
     val SMS_SCAN_KEYS = listOf(SMS_SCAN_STATE, SMS_SCAN_SCANNED, SMS_SCAN_CAPTURED, SMS_SCAN_ERROR)
     const val DEFAULT_SMS_SCAN_MONTHS = 12
 }
@@ -55,13 +56,12 @@ object KnownApps {
 class AppContainer(context: Context) {
     val db: FinanceDatabase =
         Room.databaseBuilder(context, FinanceDatabase::class.java, FinanceDatabase.NAME).build()
-    val api = com.personal.financecollector.sync.BackendApi(
-        okhttp3.OkHttpClient.Builder()
-            .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-            // Render's free tier needs up to ~90s to wake from idle.
-            .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-            .build(),
-    )
+    val http: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+        // Render's free tier needs up to ~90s to wake from idle.
+        .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+    val api = com.personal.financecollector.sync.BackendApi(http)
     val credentials = com.personal.financecollector.security.SecureCredentialStore(db.configDao())
 }
 

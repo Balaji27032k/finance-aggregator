@@ -52,6 +52,7 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - RISK: the encryption key and pairing code in use were placeholders (all-zero key). Rows stored so far are protected only by that weak key and need re-encryption or deletion before real data is relied on.
 
 ## Decisions
+- Temporary analysis export: `message_staging` table (V3, drop when done) receives full SMS (alphanumeric senders only, OTP digits masked) and Gmail mail (finance-related query, job portals/YouTube/Google notifications filtered, Google Pay and Play receipts kept, body capped at 8000 chars, newest first, resumable). Gmail is read on the phone through the Google Authorization API (`gmail.readonly`, Android OAuth client by package + SHA-1); no secrets in the app. Verified by unit tests only (backend 32, Android 85); not yet run on the phone or against Google.
 - Messages are parsed on the phone; only extracted fields (amount, direction, account last 4, counterparty, reference, balance, date, note) reach the server. Backend V2 migration wipes pre-parsing rows, drops `raw_payload` and adds `financial_transactions`. Unrecognised messages stay on the phone as NEEDS_REVIEW. Verified: 29 backend tests, 68 Android tests (9 parser tests on the real CSB, Indian Bank and SBI formats). NOT yet verified on the phone or live DB.
 - Existing running Aiven MySQL is the source of truth (free MySQL tier is retired for new services).
 - Outbox-poller drives normalization; Kafka is an optional sink added in Phase 7.
