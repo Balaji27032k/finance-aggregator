@@ -15,7 +15,8 @@ public final class Categorizer {
         RULES.put("Investments", p("groww|zerodha|angel|indmoney|upstox|mutual fund|\\bsip\\b|\\bnse\\b|\\bbse\\b|axis mf|nippon"));
         RULES.put("Rent & housing", p("\\brent\\b|landlord|housing|apartment|society|maintenance|\\bpg\\b"));
         RULES.put("Bills & recharge", p("jio|airtel|vodafone|\\bvi\\b|bsnl|recharge|electricity|tneb|tangedco|broadband|\\bdth\\b|postpaid|prepaid|"
-                + "insurance|uiic|\\blic\\b|gas |water board|autopay|mandate|sms charge"));
+                + "insurance|uiic|\\blic\\b|\\bgas\\b|water board|autopay|mandate|sms charge"));
+        RULES.put("Groceries", p("bigbasket|blinkit|zepto|instamart|grocer|kirana|vegetable|\\bfruits?\\b|\\bmilk\\b|dairy|provision|supermarket|dmart|reliance fresh|\\bmore retail"));
         RULES.put("Transport", p("transport|metro|\\bbus\\b|railway|irctc|redbus|rapido|uber|\\bola\\b|cumta|setc|tnstc|petrol|fuel|toll|fastag|"
                 + "parking|\\bcab\\b|auto fare|traffic"));
         RULES.put("Food & drinks", p("hungerbox|swiggy|zomato|restaurant|hotel|cafe|coffee|\\btea\\b|bakery|biryani|\\bfood|eatgood|eats|"

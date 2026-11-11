@@ -66,6 +66,12 @@ object CategoryColors {
         "Salary" to 0xFF22C55E,
         "Money received" to 0xFF2DD4BF,
         "Interest" to 0xFF84CC16,
+        "Groceries" to 0xFF65A30D,
+        "Education" to 0xFF6366F1,
+        "Travel" to 0xFF06B6D4,
+        "Personal care" to 0xFFD946EF,
+        "Gifts & donations" to 0xFFF43F5E,
+        "Own transfer" to 0xFF9CA3AF,
     )
 
     fun of(category: String): Color = Color(colors[category] ?: 0xFF64748B)

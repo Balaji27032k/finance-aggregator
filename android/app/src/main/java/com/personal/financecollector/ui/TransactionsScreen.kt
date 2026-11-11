@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,7 +51,7 @@ private enum class Direction(val label: String) { ALL("All"), OUT("Money out"), 
 internal fun matches(t: LedgerTxn, query: String): Boolean {
     if (query.isBlank()) return true
     val q = query.trim().lowercase()
-    return listOfNotNull(t.counterparty, t.note, t.referenceNo, t.category, t.accountLast4, t.paymentMode)
+    return listOfNotNull(t.counterparty, t.label, t.note, t.referenceNo, t.category, t.accountLast4, t.paymentMode)
         .any { it.lowercase().contains(q) } || t.amount.stripTrailingZeros().toPlainString().contains(q)
 }
 
@@ -74,7 +77,7 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
         Column(Modifier.weight(1f)) {
             Text(txn.title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                listOfNotNull(txn.category, txn.paymentMode, txn.sources.joinToString("+")).joinToString(" · "),
+                listOfNotNull(txn.label?.let { "“$it”" }, txn.category, txn.paymentMode, txn.sources.joinToString("+")).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -84,7 +87,11 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
         Text(
             (if (txn.credit) "+" else "-") + EventPresenter.rupees(txn.amount),
             fontWeight = FontWeight.SemiBold,
-            color = if (txn.credit) MoneyColors.income() else MaterialTheme.colorScheme.onSurface,
+            color = when {
+                txn.internalTransfer -> MaterialTheme.colorScheme.onSurfaceVariant
+                txn.credit -> MoneyColors.income()
+                else -> MaterialTheme.colorScheme.onSurface
+            },
         )
     }
 }
@@ -95,6 +102,7 @@ fun TransactionsScreen(
     onOpen: (LedgerTxn) -> Unit,
     presetCategory: String? = null,
     onPresetUsed: () -> Unit = {},
+    onExport: (List<LedgerTxn>) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -143,11 +151,14 @@ fun TransactionsScreen(
                     FilterChip(category == c, { category = if (category == c) null else c }, { Text(c) })
                 }
             }
-            Text(
-                "${shown.size} transaction${if (shown.size == 1) "" else "s"}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${shown.size} transaction${if (shown.size == 1) "" else "s"}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = { onExport(shown) }, enabled = shown.isNotEmpty()) { Text("Export CSV") }
+            }
         }
         if (shown.isEmpty()) {
             item {
@@ -178,10 +189,15 @@ private val timeFormat = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Local
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TxnDetailSheet(txn: LedgerTxn, onDismiss: () -> Unit) {
+fun TxnDetailSheet(
+    txn: LedgerTxn,
+    onDismiss: () -> Unit,
+    onSave: ((LedgerTxn, String?, String?, Boolean) -> Unit)? = null,
+    onReset: ((LedgerTxn, Boolean) -> Unit)? = null,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 24.dp).padding(bottom = 24.dp),
+            Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(if (txn.credit) "Money in" else "Money out", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -192,8 +208,9 @@ fun TxnDetailSheet(txn: LedgerTxn, onDismiss: () -> Unit) {
                 color = if (txn.credit) MoneyColors.income() else MaterialTheme.colorScheme.onSurface,
             )
             Text(txn.title, style = MaterialTheme.typography.titleMedium)
+            txn.label?.let { Text("“$it”", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Detail("Category", txn.category)
+                Detail("Category", txn.category + if (txn.internalTransfer) " (not counted in spending)" else "")
                 Detail("Date", txn.date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
                 txn.paymentMode?.let { Detail("Payment mode", it) }
@@ -204,6 +221,9 @@ fun TxnDetailSheet(txn: LedgerTxn, onDismiss: () -> Unit) {
                 txn.note?.let { Detail("Note", it) }
                 Detail("Seen in", txn.sources.joinToString(", "))
                 Detail("Cloud", if (txn.uploaded) "Uploaded" else "Waiting to upload")
+            }
+            if (onSave != null && onReset != null && txn.eventIds.isNotEmpty()) {
+                TxnEditor(txn, onSave, onReset, onDone = onDismiss)
             }
         }
     }

@@ -42,6 +42,9 @@ abstract class EventDao {
     @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
     abstract fun observeRecent(limit: Int): Flow<List<RawFinancialEventEntity>>
 
+    @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
+    abstract suspend fun recentList(limit: Int): List<RawFinancialEventEntity>
+
     /** Uploads that did not go through; messages that are merely not understood are not problems. */
     @Query(
         "SELECT * FROM raw_financial_events WHERE uploadStatus IN ('RETRY','FAILED_PERMANENTLY') " +

@@ -32,6 +32,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,6 +73,30 @@ class MainActivity : ComponentActivity() {
                 viewModel.gmailConnected(false, "Gmail sign-in was not completed (code ${e.statusCode})")
             }
         }
+
+    private var pendingCsv: String? = null
+
+    private val csvLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+            val text = pendingCsv
+            pendingCsv = null
+            if (uri == null || text == null) return@registerForActivityResult
+            try {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    // The byte order mark makes Excel read the rupee-era names and symbols correctly.
+                    out.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                    out.write(text.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(this, "Exported", Toast.LENGTH_SHORT).show()
+            } catch (e: java.io.IOException) {
+                Toast.makeText(this, "Could not save the file", Toast.LENGTH_LONG).show()
+            }
+        }
+
+    private fun exportCsv(list: List<LedgerTxn>) {
+        pendingCsv = CsvExport.build(list)
+        csvLauncher.launch("transactions-${java.time.LocalDate.now(LedgerBuilder.IST)}.csv")
+    }
 
     private fun connectGmail() {
         Identity.getAuthorizationClient(this).authorize(GmailAuth.request)
@@ -120,6 +145,7 @@ class MainActivity : ComponentActivity() {
             fetchNotifications = viewModel::fetchNotifications,
             checkGmail = viewModel::checkGmailNow,
             openSources = {},
+            openAccounts = {},
         )
         setContent {
             FinanceTheme {
@@ -137,8 +163,16 @@ class MainActivity : ComponentActivity() {
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
-                val screenActions = actions.copy(openSources = { tab = 5 })
-                BackHandler(enabled = tab == 5) { tab = 4 }
+                val screenActions = actions.copy(openSources = { tab = 5 }, openAccounts = { tab = 6 })
+                BackHandler(enabled = tab >= 5) { tab = 4 }
+                val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
+                val detectedAccounts by viewModel.detectedAccounts.collectAsStateWithLifecycle()
+                // Keep the home-screen widget in step with what the app is showing.
+                LaunchedEffect(ledger, budget) {
+                    com.personal.financecollector.widget.SpendWidget.save(
+                        applicationContext, com.personal.financecollector.widget.SpendWidget.numbers(ledger, budget),
+                    )
+                }
 
                 Scaffold(
                     bottomBar = {
@@ -147,7 +181,7 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Person, null) }, label = { Text("Admin", maxLines = 1, fontSize = 11.sp) })
-                            NavigationBarItem(tab == 4 || tab == 5, { tab = 4 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab >= 4, { tab = 4 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health", maxLines = 1, fontSize = 11.sp) })
                         }
                     },
                 ) { padding ->
@@ -159,8 +193,8 @@ class MainActivity : ComponentActivity() {
                             onSeeAll = { tab = 1 },
                             modifier = body,
                         )
-                        1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
-                        2 -> EventsScreen(events, uploadProblems, body)
+                        1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, ::exportCsv, body)
+                        2 -> EventsScreen(events, uploadProblems, ledger, onOpen, body)
                         3 -> AdminScreen(
                             vm = adminViewModel,
                             paired = health?.cloud?.paired == true,
@@ -169,7 +203,7 @@ class MainActivity : ComponentActivity() {
                             modifier = body,
                         )
                         4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
-                        else -> SourcesScreen(
+                        5 -> SourcesScreen(
                             apps = apps,
                             appSources = sources,
                             smsSources = smsSources,
@@ -178,8 +212,18 @@ class MainActivity : ComponentActivity() {
                             onAddSms = viewModel::addSmsSender,
                             modifier = body,
                         )
+                        else -> OwnAccountsScreen(
+                            detected = detectedAccounts,
+                            entries = ownEntries,
+                            onAddAccount = viewModel::addOwnAccount,
+                            onAddName = viewModel::addOwnName,
+                            onRemove = viewModel::removeOwn,
+                            modifier = body,
+                        )
                     }
-                    ledger.firstOrNull { it.key == openKey }?.let { TxnDetailSheet(it, onDismiss = { openKey = null }) }
+                    ledger.firstOrNull { it.key == openKey }?.let {
+                        TxnDetailSheet(it, onDismiss = { openKey = null }, onSave = viewModel::saveLabel, onReset = viewModel::resetLabel)
+                    }
                 }
             }
         }

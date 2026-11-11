@@ -19,6 +19,9 @@ import com.personal.financecollector.collector.SmsPermission
 import com.personal.financecollector.collector.SmsSender
 import com.personal.financecollector.database.CollectionStatusEntity
 import com.personal.financecollector.database.ConnectedSourceEntity
+import com.personal.financecollector.database.OwnAccountEntity
+import com.personal.financecollector.database.PayeeRuleEntity
+import com.personal.financecollector.database.TransactionLabelEntity
 import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.SourceCheckpointEntity
 import com.personal.financecollector.database.SourceType
@@ -50,6 +53,13 @@ import java.time.ZonedDateTime
 data class InstalledApp(val packageName: String, val label: String)
 
 private const val LEDGER_EVENTS = 6000
+
+data class DetectedAccount(val bankCode: String, val last4: String, val count: Int)
+
+fun ownSettings(entries: List<OwnAccountEntity>) = OwnSettings(
+    accountLast4s = entries.filter { it.kind == "ACCOUNT" }.map { it.value }.toSet(),
+    names = entries.filter { it.kind == "NAME" }.map { it.value }.toSet(),
+)
 
 data class SmsScanUi(
     val health: SourceHealth,
@@ -148,7 +158,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val parsedCache = HashMap<String, ParsedTransaction?>()
-    val ledger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
+    private val baseLedger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
         .map { all ->
             LedgerBuilder.build(all) { e ->
                 if (parsedCache.containsKey(e.localEventId)) parsedCache[e.localEventId]
@@ -157,6 +167,64 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val labelDao = db.labelDao()
+    val ownEntries: StateFlow<List<OwnAccountEntity>> = labelDao.observeOwn()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Transactions as the user sees them: messages merged across channels, then the user's corrections applied. */
+    val ledger: StateFlow<List<LedgerTxn>> = combine(baseLedger, labelDao.observeLabels(), labelDao.observeRules(), ownEntries) { base, labels, rules, own ->
+        LedgerOverlay.apply(base, labels.associateBy { it.eventId }, rules.associate { it.payeeKey to it.category }, ownSettings(own))
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Accounts seen in messages, so they can be shown as "yours" without any typing. */
+    val detectedAccounts: StateFlow<List<DetectedAccount>> = baseLedger.map { list ->
+        list.filter { it.accountLast4 != null }.groupBy { it.bankCode to it.accountLast4!! }
+            .map { (k, v) -> DetectedAccount(k.first, k.second, v.size) }.sortedByDescending { it.count }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Saves what the user says this transaction was; [category] null keeps the automatic one. */
+    fun saveLabel(txn: LedgerTxn, category: String?, label: String?, rememberPayee: Boolean) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val text = label?.trim()?.take(60)?.ifBlank { null }
+            if (category == null && text == null) {
+                labelDao.deleteLabels(txn.eventIds)
+            } else {
+                txn.eventIds.forEach { labelDao.upsertLabel(TransactionLabelEntity(it, category, text, now)) }
+            }
+            val key = LedgerOverlay.payeeKey(txn.counterparty)
+            if (rememberPayee && category != null && key != null) labelDao.upsertRule(PayeeRuleEntity(key, category, now))
+        }
+    }
+
+    /** Goes back to the automatic category and removes the description; a payee rule, if any, still applies. */
+    fun resetLabel(txn: LedgerTxn, forgetPayeeRule: Boolean) {
+        viewModelScope.launch {
+            labelDao.deleteLabels(txn.eventIds)
+            if (forgetPayeeRule) LedgerOverlay.payeeKey(txn.counterparty)?.let { labelDao.deleteRule(it) }
+        }
+    }
+
+    fun addOwnAccount(digits: String): Boolean {
+        val value = digits.trim().uppercase()
+        if (!Regex("[0-9A-Z]{3,8}").matches(value)) return false
+        viewModelScope.launch { labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$value", "ACCOUNT", value, "Account ending $value", System.currentTimeMillis())) }
+        return true
+    }
+
+    fun addOwnName(name: String): Boolean {
+        val value = name.trim().lowercase().replace(Regex("\\s+"), " ")
+        if (value.length < 3) return false
+        viewModelScope.launch { labelDao.upsertOwn(OwnAccountEntity("NAME:$value", "NAME", value, name.trim(), System.currentTimeMillis())) }
+        return true
+    }
+
+    fun removeOwn(key: String) {
+        viewModelScope.launch { labelDao.deleteOwn(key) }
+    }
 
     private val systemState = tick.map { readSystemState() }
     private val paused = db.configDao().observe(ConfigKeys.COLLECTION_PAUSED).map { it == "true" }

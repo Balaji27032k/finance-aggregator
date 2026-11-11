@@ -14,6 +14,7 @@ class CategorizerTest {
         assertThat(Categorizer.categorize(Direction.DEBIT, "Landlord Rao", "UPI", "House rent")).isEqualTo("Rent & housing");
         assertThat(Categorizer.categorize(Direction.DEBIT, "GROWW MUTUAL FUND", "UPI", "SIP")).isEqualTo("Investments");
         assertThat(Categorizer.categorize(Direction.DEBIT, "JIO PREPAID", "UPI", "Recharge")).isEqualTo("Bills & recharge");
+        assertThat(Categorizer.categorize(Direction.DEBIT, "BigBasket", "UPI", null)).isEqualTo("Groceries");
     }
 
     @Test

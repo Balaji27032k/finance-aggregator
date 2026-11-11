@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +37,15 @@ import com.personal.financecollector.database.RawFinancialEventEntity
 private enum class ActivityFilter(val label: String) { ALL("All"), FAILED("Failed"), WAITING("Waiting") }
 
 @Composable
-fun EventsScreen(events: List<RawFinancialEventEntity>, problems: List<RawFinancialEventEntity>, modifier: Modifier = Modifier) {
+fun EventsScreen(
+    events: List<RawFinancialEventEntity>,
+    problems: List<RawFinancialEventEntity>,
+    ledger: List<LedgerTxn>,
+    onEdit: (LedgerTxn) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     var filter by rememberSaveable { mutableStateOf(ActivityFilter.ALL) }
+    val byEvent = remember(ledger) { ledger.flatMap { t -> t.eventIds.map { it to t } }.toMap() }
     val waiting = remember(events) {
         events.filter { EventPresenter.statusKind(it.uploadStatus) == StatusKind.WAITING }
     }
@@ -80,7 +88,7 @@ fun EventsScreen(events: List<RawFinancialEventEntity>, problems: List<RawFinanc
             )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(shown, key = { it.localEventId }) { EventRow(it) }
+            items(shown, key = { it.localEventId }) { EventRow(it, byEvent[it.localEventId], onEdit) }
         }
     }
 }
@@ -94,7 +102,7 @@ private fun statusColor(kind: StatusKind): Color = when (kind) {
 }
 
 @Composable
-private fun EventRow(event: RawFinancialEventEntity) {
+private fun EventRow(event: RawFinancialEventEntity, txn: LedgerTxn?, onEdit: (LedgerTxn) -> Unit) {
     var expanded by remember(event.localEventId) { mutableStateOf(false) }
     val card = remember(event.localEventId, event.uploadStatus, event.lastError) { EventPresenter.present(event) }
     Panel(Modifier.clickable { expanded = !expanded }) {
@@ -113,9 +121,13 @@ private fun EventRow(event: RawFinancialEventEntity) {
         Text("Received ${card.received}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         card.extra?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         card.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        txn?.label?.let { Text("“$it”  ·  ${txn.category}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
         StatusPill(card.status, statusColor(card.statusKind))
         card.problem?.let {
             Text("Why: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+        }
+        if (txn != null) {
+            TextButton(onClick = { onEdit(txn) }) { Text(if (txn.edited) "Edit category or note" else "Add a note or change category") }
         }
         if (expanded) {
             Text("Captured ${formatTime(event.capturedTimestamp)}", style = MaterialTheme.typography.bodySmall)

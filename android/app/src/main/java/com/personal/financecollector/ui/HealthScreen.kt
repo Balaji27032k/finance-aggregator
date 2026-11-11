@@ -62,6 +62,7 @@ data class HealthActions(
     val fetchNotifications: () -> Unit,
     val checkGmail: () -> Unit,
     val openSources: () -> Unit,
+    val openAccounts: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -196,6 +197,7 @@ fun HealthScreen(
                     Switch(checked = state.paused, onCheckedChange = actions.setPaused)
                 }
                 Button(onClick = actions.openSources, modifier = Modifier.fillMaxWidth()) { Text("Choose SMS senders and apps") }
+                OutlinedButton(onClick = actions.openAccounts, modifier = Modifier.fillMaxWidth()) { Text("My accounts (own transfers)") }
                 OutlinedButton(onClick = actions.openBatterySettings, modifier = Modifier.fillMaxWidth()) { Text("Battery optimization settings") }
                 OutlinedButton(onClick = actions.sendTestNotification, modifier = Modifier.fillMaxWidth()) { Text("Send test notification") }
                 OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete local data") }

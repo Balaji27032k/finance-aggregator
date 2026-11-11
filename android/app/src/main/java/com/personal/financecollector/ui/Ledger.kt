@@ -28,6 +28,14 @@ data class LedgerTxn(
     val category: String,
     val sources: List<String>,
     val uploaded: Boolean,
+    /** Every captured event (SMS, e-mail, notification) behind this one transaction; edits are saved against all of them. */
+    val eventIds: List<String> = emptyList(),
+    /** What the user says it was for, such as "milk". */
+    val label: String? = null,
+    /** True when the user changed the category or added a description. */
+    val edited: Boolean = false,
+    /** Moves money between the user's own accounts; left out of spending and income totals. */
+    val internalTransfer: Boolean = false,
 ) {
     val title: String get() = counterparty?.let(::prettyName) ?: paymentMode?.let { "$it ${if (credit) "credit" else "payment"}" } ?: if (credit) "Money received" else "Money sent"
 }
@@ -134,6 +142,7 @@ object LedgerBuilder {
             category = Categories.of(credit, counterparty, mode, note),
             sources = ordered.map { sourceName(it.event.sourceType) }.distinct(),
             uploaded = group.items.all { it.event.uploadStatus == UploadStatus.SYNCED },
+            eventIds = group.items.map { it.event.localEventId },
         )
     }
 
@@ -147,11 +156,20 @@ object LedgerBuilder {
 /** Display-only labels based on the payee and note as received; nothing is renamed or stored. */
 object Categories {
     const val OTHER = "Other"
+    const val OWN_TRANSFER = "Own transfer"
+
+    /** What the user can pick when fixing a transaction. */
+    val CHOICES = listOf(
+        "Food & drinks", "Groceries", "Transport", "Shopping", "Bills & recharge", "Rent & housing", "Health",
+        "Investments", "Entertainment & apps", "Education", "Travel", "Personal care", "Gifts & donations",
+        "Cash withdrawal", "Cash deposit", "Salary", "Money received", "Interest", OWN_TRANSFER, OTHER,
+    )
 
     private val rules: List<Pair<String, Regex>> = listOf(
         "Investments" to r("groww|zerodha|angel|indmoney|upstox|mutual fund|\\bsip\\b|\\bnse\\b|\\bbse\\b|axis mf|nippon"),
         "Rent & housing" to r("\\brent\\b|landlord|housing|apartment|society|maintenance|\\bpg\\b"),
-        "Bills & recharge" to r("jio|airtel|vodafone|\\bvi\\b|bsnl|recharge|electricity|tneb|tangedco|broadband|\\bdth\\b|postpaid|prepaid|insurance|uiic|\\blic\\b|gas |water board|autopay|mandate|sms charge"),
+        "Bills & recharge" to r("jio|airtel|vodafone|\\bvi\\b|bsnl|recharge|electricity|tneb|tangedco|broadband|\\bdth\\b|postpaid|prepaid|insurance|uiic|\\blic\\b|\\bgas\\b|water board|autopay|mandate|sms charge"),
+        "Groceries" to r("bigbasket|blinkit|zepto|instamart|grocer|kirana|vegetable|\\bfruits?\\b|\\bmilk\\b|dairy|provision|supermarket|dmart|reliance fresh|\\bmore retail"),
         "Transport" to r("transport|metro|\\bbus\\b|railway|irctc|redbus|rapido|uber|\\bola\\b|cumta|setc|tnstc|petrol|fuel|toll|fastag|parking|\\bcab\\b|auto fare|traffic"),
         "Food & drinks" to r("hungerbox|swiggy|zomato|restaurant|hotel|cafe|coffee|\\btea\\b|bakery|biryani|\\bfood|eatgood|eats|kitchen|canteen|sweets|juice|pizza|burger|meal|mess\\b|dosa|idly|snack|ice cream|bhojan|foods|catering"),
         "Health" to r("pharma|medical|medi\\b|hospital|clinic|\\blab\\b|apollo|health|diagnostic|dental"),

@@ -58,7 +58,9 @@ object StatsCalculator {
         count = list.size,
     )
 
-    fun compute(all: List<LedgerTxn>, from: LocalDate, to: LocalDate): Stats {
+    fun compute(everything: List<LedgerTxn>, from: LocalDate, to: LocalDate): Stats {
+        // Moving money between your own accounts is neither spending nor income.
+        val all = everything.filter { !it.internalTransfer }
         val days = ChronoUnit.DAYS.between(from, to).toInt() + 1
         val inRange = between(all, from, to)
         val previous = between(all, from.minusDays(days.toLong()), from.minusDays(1))
@@ -83,7 +85,8 @@ object StatsCalculator {
             highlights(days, totals, prevTotals, savings, byCategory, debits))
     }
 
-    fun monthPace(all: List<LedgerTxn>, today: LocalDate): MonthPace {
+    fun monthPace(everything: List<LedgerTxn>, today: LocalDate): MonthPace {
+        val all = everything.filter { !it.internalTransfer }
         val month = YearMonth.from(today)
         val spent = all.filter { !it.credit && YearMonth.from(it.date) == month }.sumOf { it.amount }
         val elapsed = today.dayOfMonth
