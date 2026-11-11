@@ -17,7 +17,7 @@ fun testEvent(id: String, capturedAt: Long = 1_000L, status: UploadStatus = Uplo
     sourceEventId = "src-$id",
     eventTimestamp = 1_700_000_000_000L,
     capturedTimestamp = capturedAt,
-    rawPayload = "Rs 10 debited",
+    rawPayload = "Rs 10 debited from A/c X0000 on 10-11-26",
     payloadHash = "hash-$id",
     parserStatus = ParserStatus.UNPARSED,
     parserVersion = "raw-1",

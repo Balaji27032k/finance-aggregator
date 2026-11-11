@@ -46,6 +46,9 @@ object DefaultSmsSenders {
         "INDBNK" to "Indian Bank",
         "SBIUPI" to "SBI (UPI)",
         "SBIPSG" to "SBI",
+        "ATMSBI" to "SBI (ATM and card)",
+        "CBSSBI" to "SBI (core banking)",
+        "SBYONO" to "SBI YONO",
     )
 }
 

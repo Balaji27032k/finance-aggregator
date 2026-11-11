@@ -3,6 +3,8 @@ package com.personal.financecollector.collector
 import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.SourceType
 import java.math.BigDecimal
+import java.math.RoundingMode
+import java.time.DateTimeException
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Month
@@ -25,35 +27,68 @@ data class ParsedTransaction(
 
 /**
  * Extracts the facts of a bank SMS (amount, direction, account, counterparty, reference, balance, date).
- * Returns null when the direction or amount cannot be determined, so an unfamiliar message is never guessed at.
+ * Returns null whenever the message is not a completed money movement or cannot be read with confidence:
+ * OTPs, declines, upcoming-mandate notices, payment requests, balance replies and offers never become transactions.
  */
 object TransactionParser {
-    const val VERSION = "sms-1"
+    const val VERSION = "sms-2"
+
+    /** Sender entities whose SMS describe movements on the user's own accounts or cards. */
+    val BANK_SENDERS = setOf("INDBNK", "CSBBNK", "SBIUPI", "SBIPSG", "SBIBNK", "SBYONO", "ATMSBI", "CBSSBI", "SBIINB", "ICICIT")
 
     private const val CUR = """(?<![A-Za-z])(?:Rs\.?|INR|₹)"""
     private const val NUM = """[0-9][0-9,]*(?:\.[0-9]{1,2})?"""
-    private val OPTS = setOf(RegexOption.IGNORE_CASE)
+    private const val OPT_CUR = """(?:Rs\.?\s*)?(?:INR\s*)?"""
+    private val I = setOf(RegexOption.IGNORE_CASE)
 
-    private val direction = Regex("""\b(debited|withdrawn|spent|sent|credited|received|deposited)\b""", OPTS)
-    private val amountAfterKeyword = Regex(
-        """\b(?:debited|withdrawn|spent|sent|credited|received|deposited)\s*(?:by|for|with|of)?\s*(?:Rs\.?|INR|₹)?\s*($NUM)""", OPTS,
+    private val debitWord = Regex(
+        """\b(?:debited|withdrawn|w/d|spent|sent(?=\s+(?:rs|inr|₹))|has\s+a\s+debit|debit(?=\s+\d)|""" +
+            """transaction\s+number\s+\d+\s+for\s+(?:rs|inr))\b""",
+        I,
     )
-    private val currencyAmount = Regex("""$CUR\s*($NUM)""", OPTS)
+    private val creditWord = Regex("""\b(?:credited|deposited|has\s+credit|credit(?=\s+\d))\b""", I)
+
+    private val amountAfterWord = Regex(
+        """\b(?:debited|withdrawn|spent|sent|credited|deposited|debit|credit)\s*(?:by|for|with|of)?\s*$OPT_CUR($NUM)""", I,
+    )
+    private val currencyAmount = Regex("""$CUR\s*(?:INR\s*)?($NUM)""", I)
     private val balance = Regex(
-        """(?:Avl\.?\s*Bal(?:ance)?|Available\s+Bal(?:ance)?|Bal(?:ance)?)\s*(?:is|:|-)?\s*(?:Rs\.?|INR|₹)?\s*($NUM)""", OPTS,
+        """\b(?:(?:avl|avail(?:able)?|current|cur|clear|updated(?:\s+available)?(?:\s+account)?)\.?\s*)?bal(?:ance)?\.?[\s:\-]*(?:is\s*)?$OPT_CUR($NUM)""",
+        I,
     )
-    private val account = Regex("""A/c\s*(?:No\.?\s*)?[*Xx]*\s*([0-9]{3,})""", OPTS)
-    private val stop = """(?=[.,(]|\s+(?:RRN|Ref|UPI|If\s|Avl|Not\s)|$)"""
-    private val payee = Regex("""\b(?:to|at)\s+(?!your\b|A/c\b)(?=[A-Za-z])(.+?)$stop""", OPTS)
-    private val payer = Regex("""\b(?:by|from)\s+(?!A/c\b)(?!(?:Rs\.?|INR|₹)?\s*\d)(?=[A-Za-z])(.+?)$stop""", OPTS)
+
+    private val account = Regex("""\bA/?c(?:count)?\.?\s*(?:No\.?|number)?\.?\s*(?:ending(?:\s+with)?\s*)?[*Xx.\-]*\s*([0-9]{3,})""", I)
+    private val card = Regex("""\bcard\s*(?:no\.?|ending(?:\s+with)?)?\s*[*Xx\-]*([0-9]{4})\b""", I)
+
+    private const val STOP = """(?=[.,(]|\s+(?:RRN|Ref|UPI|If\s|Avl|Avail|Not\s|from\s|on\s+\d|on\s+date|dt\s|Ac\s|A/c\s)|\s*$)"""
+    private val payee = Regex("""\b(?:to|at)\s+(?!your\b|A/c\b)(?=[A-Za-z])(.+?)$STOP""", I)
+    private val payer = Regex("""\b(?:by|from)\s+(?!A/c\b)(?!(?:Rs\.?|INR|₹)?\s*\d)(?=[A-Za-z])(.+?)$STOP""", I)
+    private val linked = Regex("""linked to (?:mobile(?: number)?|VPA)\s+([A-Za-z0-9X@._\-]+)""", I)
+    private val vpa = Regex("""([A-Za-z0-9._\-]+@[A-Za-z0-9]+)""")
+    private val upiStructured = Regex("""UPI/(?:DR|CR)/(\d{6,})/([^/]*)/([A-Za-z0-9]{3,4})/([^/]*)/(.*?)(?=\s+on\s+\d|\s*$)""", I)
     private val reference = Regex(
-        """(?:UPI\s*Ref\.?\s*no\.?|RRN|Ref\s*no\.?|UTR(?:\s*No\.?)?)\s*[:\-]?\s*([A-Za-z0-9]{6,})""", OPTS,
+        """(?:UPI/(?:DR|CR|REVERSAL)/|UPI\s*Ref\.?\s*no\.?|IMPS\s*Ref\.?\s*no\.?|UPI|IMPS|RRN|Ref\s*no\.?|Ref|""" +
+            """UTR(?:\s*No\.?)?|Transaction\s*(?:Number|No\.?))\s*[:\-]?\s*((?=[A-Za-z0-9]*\d)[A-Za-z0-9]{6,})""",
+        I,
     )
     private val date = Regex(
-        """\bon\s+(?:date\s+)?(?:(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})|(\d{1,2})[-/ ]?([A-Za-z]{3})[-/ ]?(\d{2,4}))""", OPTS,
+        """\b(?:on|dt|dated)\s+(?:date\s+)?(?:(\d{4})[-/](\d{1,2})[-/](\d{1,2})|(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})|""" +
+            """(\d{1,2})[-/ ]?([A-Za-z]{3})[-/ ]?(\d{2,4}))""",
+        I,
     )
-    private val info = Regex("""INFO:\s*(.+)$""", OPTS)
-    private val footer = Regex("""\s*-\s*(?:SBI|Indian Bank|CSB Bank)\s*$""", OPTS)
+    private val info = Regex("""INFO:\s*(.+)$""", I)
+    private val towards = Regex("""\btowards\s+(.+?)(?=\s+on\s+\d|\.\s|\.$|$)""", I)
+    private val footer = Regex("""\s*-\s*(?:SBI|Indian Bank|CSB Bank|CSB)\s*$""", I)
+
+    private val notAMovement = listOf(
+        Regex("""\bOTP\s+(?:is|for|to|code)\b|\bis\s+(?:your\s+|the\s+)?OTP\b|\bOTP[:\-]""", I),
+        Regex("""\b(?:declined|failed|unsuccessful|unable to|not completed)\b""", I),
+        Regex("""\bwill be\s+(?:auto\s+)?debited\b""", I),
+        Regex("""\bupcoming mandate\b""", I),
+        Regex("""\b(?:requested money|has requested|on approv(?:al|ing))\b""", I),
+        Regex("""\bRecurring Deposit\b""", I),
+        Regex("""\bLast transaction in\b""", I),
+    )
 
     fun parse(event: RawFinancialEventEntity): ParsedTransaction? =
         if (event.sourceType == SourceType.SMS) {
@@ -63,12 +98,17 @@ object TransactionParser {
         }
 
     fun parseSms(bankCode: String, body: String, eventTimestampMs: Long): ParsedTransaction? {
+        if (bankCode.uppercase() !in BANK_SENDERS) return null
         val text = body.replace(Regex("""\s+"""), " ").trim()
-        val keyword = direction.find(text) ?: return null
-        val isDebit = keyword.value.lowercase() in setOf("debited", "withdrawn", "spent", "sent")
+        if (notAMovement.any { it.containsMatchIn(text) }) return null
+
+        val debit = debitWord.find(text)
+        val credit = creditWord.find(text)
+        val first = listOfNotNull(debit, credit).minByOrNull { it.range.first } ?: return null
+        val isDebit = first === debit
 
         val balanceMatch = balance.find(text)
-        val amountText = amountAfterKeyword.find(text, keyword.range.first)?.takeIf { it.range.first == keyword.range.first }
+        val amountText = amountAfterWord.find(text, first.range.first)?.takeIf { it.range.first == first.range.first }
             ?.groupValues?.get(1)
             ?: currencyAmount.findAll(text).firstOrNull { m -> balanceMatch?.groups?.get(1)?.range?.let { it.first !in m.range } != false }
                 ?.groupValues?.get(1)
@@ -77,40 +117,73 @@ object TransactionParser {
         if (amount.signum() <= 0) return null
 
         val accounts = account.findAll(text).map { it.groupValues[1].takeLast(4) }.toList()
-        val name = (if (isDebit) payee else payer).find(text)?.groupValues?.get(1)?.trim()?.take(200)?.ifBlank { null }
-        val upper = text.uppercase()
-        val mode = listOf("UPI", "NEFT", "IMPS", "RTGS", "ATM").firstOrNull { Regex("""\b$it\b""").containsMatchIn(upper) }
-        val note = info.find(text)?.groupValues?.get(1)?.replace(footer, "")?.trim()?.take(255)?.ifBlank { null }
+        val cardLast4 = card.find(text)?.groupValues?.get(1)
+        val structured = upiStructured.find(text)
+        val referenceNo = structured?.groupValues?.get(1) ?: reference.find(text)?.groupValues?.get(1)
+
+        // A real alert always carries an account or card, a reference or a balance; offers and notices do not.
+        if (accounts.isEmpty() && cardLast4 == null && referenceNo == null && balanceMatch == null) return null
+
+        val name = structured?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: linked.find(text)?.groupValues?.get(1)?.trimEnd('.', '-')
+            ?: (if (isDebit) payee else payer).find(text)?.groupValues?.get(1)?.trim()?.take(200)?.ifBlank { null }
+            ?: vpa.find(text)?.value
+        val remark = structured?.groupValues?.get(5)?.trim()?.takeIf { it.isNotEmpty() && !it.equals("UPI", true) }
+        val note = info.find(text)?.groupValues?.get(1)?.replace(footer, "")?.trim()
+            ?: remark
+            ?: special(text)
+            ?: (if (structured == null) towards.find(text)?.groupValues?.get(1)?.trim() else null)
 
         return ParsedTransaction(
             direction = if (isDebit) "DEBIT" else "CREDIT",
             amount = amount,
             currency = "INR",
-            accountLast4 = accounts.firstOrNull(),
+            accountLast4 = accounts.firstOrNull() ?: cardLast4,
             counterparty = name,
-            counterpartyAccountLast4 = accounts.getOrNull(1),
-            paymentMode = mode,
-            referenceNo = reference.find(text)?.groupValues?.get(1),
+            counterpartyAccountLast4 = accounts.drop(1).firstOrNull { it != accounts.first() },
+            paymentMode = mode(text),
+            referenceNo = referenceNo,
             balanceAfter = balanceMatch?.groupValues?.get(1)?.let { money(it) },
             transactionDate = textDate(text) ?: Instant.ofEpochMilli(eventTimestampMs).atZone(ZoneId.systemDefault()).toLocalDate(),
             bankCode = bankCode,
-            note = note,
+            note = note?.take(255)?.ifBlank { null },
         )
     }
 
-    private fun money(raw: String): BigDecimal? =
-        raw.replace(",", "").toBigDecimalOrNull()?.setScale(2, java.math.RoundingMode.HALF_UP)
+    /** Messages whose kind matters more than any free text in them. */
+    private fun special(text: String): String? = when {
+        Regex("""/REVERSAL/""", I).containsMatchIn(text) -> "UPI reversal"
+        Regex("""\bUPI LITE\b""", I).containsMatchIn(text) -> "UPI Lite top-up"
+        Regex("""\binterest\b|\bint\.""", I).containsMatchIn(text) -> "Interest"
+        else -> null
+    }
+
+    private fun mode(text: String): String? = when {
+        Regex("""\b(?:mandate|autopay)\b""", I).containsMatchIn(text) -> "AUTOPAY"
+        Regex("""\bUPI\b""", I).containsMatchIn(text) -> "UPI"
+        Regex("""^Sent\s+Rs""", I).containsMatchIn(text) && Regex("""\bRRN\b""", I).containsMatchIn(text) -> "UPI"
+        Regex("""\bIMPS\b""", I).containsMatchIn(text) -> "IMPS"
+        Regex("""\bNEFT\b""", I).containsMatchIn(text) -> "NEFT"
+        Regex("""\bRTGS\b""", I).containsMatchIn(text) -> "RTGS"
+        Regex("""\bATM\b""", I).containsMatchIn(text) -> "ATM"
+        Regex("""\b(?:debit|credit)\s+card\b""", I).containsMatchIn(text) -> "CARD"
+        else -> null
+    }
+
+    private fun money(raw: String): BigDecimal? = raw.replace(",", "").toBigDecimalOrNull()?.setScale(2, RoundingMode.HALF_UP)
 
     private fun textDate(text: String): LocalDate? {
         val m = date.find(text) ?: return null
         return try {
-            if (m.groups[1] != null) {
-                LocalDate.of(year(m.groupValues[3]), m.groupValues[2].toInt(), m.groupValues[1].toInt())
-            } else {
-                val month = Month.entries.firstOrNull { it.name.startsWith(m.groupValues[5].uppercase()) } ?: return null
-                LocalDate.of(year(m.groupValues[6]), month, m.groupValues[4].toInt())
+            when {
+                m.groups[1] != null -> LocalDate.of(m.groupValues[1].toInt(), m.groupValues[2].toInt(), m.groupValues[3].toInt())
+                m.groups[4] != null -> LocalDate.of(year(m.groupValues[6]), m.groupValues[5].toInt(), m.groupValues[4].toInt())
+                else -> {
+                    val month = Month.entries.firstOrNull { it.name.startsWith(m.groupValues[8].uppercase()) } ?: return null
+                    LocalDate.of(year(m.groupValues[9]), month, m.groupValues[7].toInt())
+                }
             }
-        } catch (_: java.time.DateTimeException) {
+        } catch (_: DateTimeException) {
             null
         }
     }
