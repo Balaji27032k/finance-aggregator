@@ -132,6 +132,7 @@ private fun AdminHome(vm: AdminViewModel, budget: Long?, onSetBudget: (Long?) ->
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var openKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var refresh by remember { mutableIntStateOf(0) }
     val today = remember { LocalDate.now(LedgerBuilder.IST) }
     val (from, to) = period.range(today)
     val summary by vm.summary.collectAsStateWithLifecycle()
@@ -140,7 +141,10 @@ private fun AdminHome(vm: AdminViewModel, budget: Long?, onSetBudget: (Long?) ->
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text("Admin", style = MaterialTheme.typography.headlineSmall)
-            TextButton(onClick = vm::signOut) { Text("Sign out") }
+            Row {
+                TextButton(onClick = { refresh++ }) { Text("Refresh") }
+                TextButton(onClick = vm::signOut) { Text("Sign out") }
+            }
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
             items(AdminTab.entries) { t -> FilterChip(tab == t, { tab = t }, { Text(t.label) }) }
@@ -152,7 +156,7 @@ private fun AdminHome(vm: AdminViewModel, budget: Long?, onSetBudget: (Long?) ->
         }
         when (tab) {
             AdminTab.SUMMARY -> {
-                LaunchedEffect(period) { vm.loadSummary(from, to) }
+                LaunchedEffect(period, refresh) { vm.loadSummary(from, to) }
                 SummaryTab(
                     state = summary,
                     budget = budget,
@@ -162,9 +166,9 @@ private fun AdminHome(vm: AdminViewModel, budget: Long?, onSetBudget: (Long?) ->
                     onOpenCategory = { category = it; tab = AdminTab.TRANSACTIONS },
                 )
             }
-            AdminTab.TRANSACTIONS -> TransactionsTab(vm, txns, from, to, category, { category = it }, { openKey = it.key })
+            AdminTab.TRANSACTIONS -> TransactionsTab(vm, txns, from, to, category, refresh, { category = it }, { openKey = it.key })
             AdminTab.HEALTH -> {
-                LaunchedEffect(Unit) { vm.loadHealth() }
+                LaunchedEffect(refresh) { vm.loadHealth() }
                 HealthTab(vm)
             }
         }
@@ -198,24 +202,47 @@ private fun SummaryTab(
     val stats = s.stats
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { HeroCard(stats) }
-        item {
-            InfoCard("Daily spending") {
-                SpendBars(chartBars(stats.daily))
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(shortDate(stats.from), style = MaterialTheme.typography.labelSmall)
-                    Text(shortDate(stats.to), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
+        item { HighlightsCard(stats.highlights) }
+        item { InfoCard("Money in and out") { InOutChart(stats.daily) } }
         if (stats.byCategory.isNotEmpty()) item { CategoryCard(stats, onOpenCategory) }
         item { PaceCard(s.pace, budget, onSetBudget) }
         item {
             InfoCard("Last 12 months") {
-                MonthlyBars(s)
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(s.monthly.firstOrNull()?.month.orEmpty(), style = MaterialTheme.typography.labelSmall)
-                    Text("green = in, red = out", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(s.monthly.lastOrNull()?.month.orEmpty(), style = MaterialTheme.typography.labelSmall)
+                GroupedBars(
+                    labels = s.monthly.map { monthShort(it.month) },
+                    series = listOf(MoneyColors.income() to s.monthly.map { it.income }, MoneyColors.spend() to s.monthly.map { it.spend }),
+                    caption = { i -> s.monthly[i].let { "${monthShort(it.month)} ${it.month.take(4)}   In ${rupeesWhole(it.income)}   Out ${rupeesWhole(it.spend)}" } },
+                )
+            }
+        }
+        item {
+            InfoCard(if (stats.daily.size > 182) "Spending calendar (last 26 weeks)" else "Spending calendar") {
+                SpendCalendar(stats.daily.takeLast(182))
+            }
+        }
+        item {
+            InfoCard("By day of week") {
+                GroupedBars(
+                    labels = s.byWeekday.map { it.key },
+                    series = listOf(MaterialTheme.colorScheme.primary to s.byWeekday.map { it.total }),
+                    caption = { i -> s.byWeekday[i].let { "${it.key}   ${rupeesWhole(it.total)} in ${it.count} payments" } },
+                )
+            }
+        }
+        item {
+            InfoCard("By time of day (India time)") {
+                GroupedBars(
+                    labels = s.byHour.map { it.key },
+                    series = listOf(MaterialTheme.colorScheme.secondary to s.byHour.map { it.total }),
+                    caption = { i -> s.byHour[i].let { "${it.key}:00   ${rupeesWhole(it.total)} in ${it.count} payments" } },
+                    labelEvery = 4,
+                )
+            }
+        }
+        if (s.spikes.isNotEmpty()) {
+            item {
+                InfoCard("Unusually high days") {
+                    s.spikes.forEach { d -> StatRow(shortDate(d.date), rupeesWhole(d.spend)) }
                 }
             }
         }
@@ -239,6 +266,8 @@ private fun SummaryTab(
         }
         if (stats.topPayees.isNotEmpty()) item { TopPayeesCard("Top payees", stats.topPayees) }
         if (s.incomeSources.isNotEmpty()) item { TopPayeesCard("Where money came from", s.incomeSources.take(5)) }
+        if (s.byMode.isNotEmpty()) item { TopPayeesCard("By payment mode", s.byMode.take(6)) }
+        if (s.byBank.isNotEmpty()) item { TopPayeesCard("By bank", s.byBank.take(6)) }
         if (stats.biggest.isNotEmpty()) {
             item {
                 InfoCard("Biggest expenses") {
@@ -257,33 +286,13 @@ private fun SummaryTab(
 }
 
 @Composable
-private fun MonthlyBars(s: AdminSummary) {
-    val income = MoneyColors.income()
-    val spend = MoneyColors.spend()
-    val max = s.monthly.maxOfOrNull { maxOf(it.income, it.spend) }?.takeIf { it.signum() > 0 } ?: java.math.BigDecimal.ONE
-    Canvas(Modifier.fillMaxWidth().height(140.dp)) {
-        val groups = s.monthly.size.coerceAtLeast(1)
-        val groupWidth = size.width / groups
-        val bar = groupWidth * 0.32f
-        s.monthly.forEachIndexed { i, m ->
-            val left = i * groupWidth + groupWidth * 0.12f
-            listOf(m.income to income, m.spend to spend).forEachIndexed { k, (value, color) ->
-                val h = (value.toFloat() / max.toFloat()) * (size.height - 4f)
-                if (h > 0f) {
-                    drawRoundRect(color, Offset(left + k * (bar + 2f), size.height - h), Size(bar, h), CornerRadius(bar.coerceAtMost(10f) / 2))
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun TransactionsTab(
     vm: AdminViewModel,
     state: Remote<com.personal.financecollector.admin.AdminTxnPage>,
     from: LocalDate,
     to: LocalDate,
     category: String?,
+    refresh: Int,
     onCategory: (String?) -> Unit,
     onOpen: (LedgerTxn) -> Unit,
 ) {
@@ -291,7 +300,7 @@ private fun TransactionsTab(
     var direction by rememberSaveable { mutableStateOf<String?>(null) }
     var limit by rememberSaveable { mutableIntStateOf(50) }
     LaunchedEffect(from, to, query, direction, category) { limit = 50 }
-    LaunchedEffect(from, to, query, direction, category, limit) {
+    LaunchedEffect(from, to, query, direction, category, limit, refresh) {
         delay(300)
         vm.loadTransactions(from, to, query, direction, category, limit)
     }
@@ -320,7 +329,17 @@ private fun TransactionsTab(
     }
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         if (page.items.isEmpty()) item { Text("Nothing matches these filters.", modifier = Modifier.padding(vertical = 24.dp)) }
-        items(page.items, key = { it.key }) { t -> TxnRow(t, onClick = { onOpen(t) }) }
+        val today = LocalDate.now(LedgerBuilder.IST)
+        page.items.groupBy { it.date }.toSortedMap(compareByDescending { it }).forEach { (date, list) ->
+            item(key = "h-$date") {
+                val net = list.fold(java.math.BigDecimal.ZERO) { acc, t -> if (t.credit) acc + t.amount else acc - t.amount }
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 2.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(dayLabel(date, today), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text((if (net.signum() >= 0) "+" else "-") + rupeesWhole(net.abs()), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            items(list, key = { it.key }) { t -> TxnRow(t, onClick = { onOpen(t) }) }
+        }
         if (page.items.size < page.total) {
             item {
                 if (limit < 200) {

@@ -64,6 +64,8 @@ class AdminJsonTest {
         assertEquals("HDFCBK", s.balances.single().bank)
         assertEquals(30, s.pace.daysInMonth)
         assertEquals("ACME", s.incomeSources.single().key)
+        assertTrue(s.stats.highlights.any { it.contains("kept 80%") })
+        assertTrue(s.stats.highlights.any { it.contains("Rent & housing is your biggest category") })
     }
 
     @Test

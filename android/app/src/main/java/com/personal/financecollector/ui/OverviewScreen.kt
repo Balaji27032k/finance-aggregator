@@ -245,7 +245,7 @@ internal fun HeroCard(stats: Stats) {
 internal fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
     val total = stats.byCategory.sumOf { it.total }
     InfoCard("Where it went (tap to see)") {
-        CategoryStack(stats.byCategory)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CategoryDonut(stats.byCategory) }
         Column(Modifier.padding(top = 8.dp)) {
             stats.byCategory.take(6).forEach { b ->
                 Row(

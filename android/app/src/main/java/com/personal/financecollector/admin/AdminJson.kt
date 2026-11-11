@@ -25,6 +25,11 @@ data class AdminSummary(
     val balances: List<BalanceItem>,
     val incomeSources: List<Bucket>,
     val pace: MonthPace,
+    val byMode: List<Bucket>,
+    val byBank: List<Bucket>,
+    val byWeekday: List<Bucket>,
+    val byHour: List<Bucket>,
+    val spikes: List<DayAmount>,
 )
 
 data class AdminTxnPage(
@@ -92,7 +97,7 @@ object AdminJson {
         val o = JSONObject(body)
         val range = o.getJSONObject("range")
         val projection = o.getJSONObject("projection")
-        val stats = Stats(
+        val base = Stats(
             from = LocalDate.parse(range.getString("from")),
             to = LocalDate.parse(range.getString("to")),
             days = range.int("days"),
@@ -105,18 +110,64 @@ object AdminJson {
             biggest = o.getJSONArray("largestExpenses").map(::txn),
             highlights = emptyList(),
         )
+        val weekday = o.getJSONArray("byWeekday").map(::bucket)
+        val hours = o.getJSONArray("byHour").map(::bucket)
+        val spikes = o.getJSONArray("spikes").map { DayAmount(LocalDate.parse(it.getString("date")), it.dec("spend"), it.dec("income")) }
+        val recurring = o.getJSONArray("recurring").map {
+            RecurringItem(it.getString("name"), it.dec("typicalAmount"), it.int("occurrences"), LocalDate.parse(it.getString("nextExpected")))
+        }
+        val stats = base.copy(highlights = highlights(base, weekday, hours, recurring, spikes))
         return AdminSummary(
             stats = stats,
             monthly = o.getJSONArray("monthly").map { MonthAmount(it.getString("month"), it.dec("income"), it.dec("spend")) },
-            recurring = o.getJSONArray("recurring").map {
-                RecurringItem(it.getString("name"), it.dec("typicalAmount"), it.int("occurrences"), LocalDate.parse(it.getString("nextExpected")))
-            },
+            recurring = recurring,
             balances = o.getJSONArray("balances").map {
                 BalanceItem(it.getString("bankCode"), it.getString("accountLast4"), it.dec("balance"), Instant.parse(it.getString("asOf")))
             },
             incomeSources = o.getJSONArray("topIncomeSources").map(::bucket),
             pace = MonthPace(projection.dec("spentSoFar"), projection.dec("projected"), projection.int("daysElapsed"), projection.int("daysInMonth")),
+            byMode = o.getJSONArray("byMode").map(::bucket),
+            byBank = o.getJSONArray("byBank").map(::bucket),
+            byWeekday = weekday,
+            byHour = hours,
+            spikes = spikes,
         )
+    }
+
+    private val fullDay = mapOf(
+        "Mon" to "Monday", "Tue" to "Tuesday", "Wed" to "Wednesday", "Thu" to "Thursday",
+        "Fri" to "Friday", "Sat" to "Saturday", "Sun" to "Sunday",
+    )
+
+    /** Plain-language findings, the same ones the web dashboard shows. */
+    fun highlights(
+        stats: Stats, weekday: List<Bucket>, hours: List<Bucket>, recurring: List<RecurringItem>, spikes: List<DayAmount>,
+    ): List<String> {
+        val out = mutableListOf<String>()
+        val prev = stats.previous.spend
+        if (prev.signum() > 0) {
+            val change = stats.totals.spend.subtract(prev).multiply(BigDecimal(100)).divide(prev, 0, java.math.RoundingMode.HALF_UP).toInt()
+            out += when {
+                change == 0 -> "Spending is about the same as the previous ${stats.days} days."
+                change > 0 -> "You spent $change% more than in the previous ${stats.days} days."
+                else -> "You spent ${-change}% less than in the previous ${stats.days} days."
+            }
+        }
+        val total = stats.byCategory.sumOf { it.total }
+        stats.byCategory.firstOrNull()?.takeIf { total.signum() > 0 }?.let {
+            val pct = it.total.multiply(BigDecimal(100)).divide(total, 0, java.math.RoundingMode.HALF_UP).toInt()
+            out += "${it.key} is your biggest category: $pct% of spending."
+        }
+        weekday.maxByOrNull { it.total }?.takeIf { it.total.signum() > 0 }?.let { out += "You spend the most on ${fullDay[it.key] ?: it.key}s." }
+        hours.maxByOrNull { it.total }?.takeIf { it.total.signum() > 0 }?.let { out += "Spending peaks around ${it.key}:00 (India time)." }
+        stats.savingsPercent?.let {
+            out += if (it >= 0) "You kept $it% of what came in." else "You spent ${-it}% more than what came in."
+        }
+        if (recurring.isNotEmpty()) {
+            out += "${recurring.size} payment${if (recurring.size == 1) "" else "s"} repeat about monthly."
+        }
+        spikes.firstOrNull()?.let { out += "Spending spiked on ${com.personal.financecollector.ui.shortDate(it.date)}." }
+        return out
     }
 
     fun transactions(body: String): AdminTxnPage {
