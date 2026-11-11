@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
                 val budget by viewModel.budget.collectAsStateWithLifecycle()
                 val health by viewModel.health.collectAsStateWithLifecycle()
                 val events by viewModel.events.collectAsStateWithLifecycle()
+                val uploadProblems by viewModel.uploadProblems.collectAsStateWithLifecycle()
                 val ledger by viewModel.ledger.collectAsStateWithLifecycle()
                 val sources by viewModel.sources.collectAsStateWithLifecycle()
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
@@ -158,7 +159,7 @@ class MainActivity : ComponentActivity() {
                             modifier = body,
                         )
                         1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
-                        2 -> EventsScreen(events, body)
+                        2 -> EventsScreen(events, uploadProblems, body)
                         3 -> AdminScreen(
                             backendUrl = health?.cloud?.takeIf { it.paired }?.backendUrl,
                             onOpen = ::openDashboard,

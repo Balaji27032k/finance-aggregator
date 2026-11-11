@@ -144,6 +144,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Every understood transaction on the phone, merged across SMS, e-mail and notifications. Parsed off the main thread. */
+    val uploadProblems: StateFlow<List<RawFinancialEventEntity>> = db.eventDao().observeUploadProblems(300)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val parsedCache = HashMap<String, ParsedTransaction?>()
     val ledger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
         .map { all ->

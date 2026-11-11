@@ -64,6 +64,20 @@ class EventPresenterTest {
     }
 
     @Test
+    fun failedAndRetryingUploadsAreFlaggedWithTheReason() {
+        val sms = "A/c *0000 debited Rs. 86.80 on 07-12-25 to HungerBox. UPI:421960362907. Not you? SMS BLOCK to 9289592895 - Indian Bank"
+        val retry = EventPresenter.present(event(SourceType.SMS, "INDBNK", sms, UploadStatus.RETRY).copy(lastError = "timeout"))
+        assertEquals(StatusKind.RETRYING, retry.statusKind)
+        assertEquals("Upload failed, will retry", retry.status)
+        assertEquals("timeout", retry.problem)
+        val failed = EventPresenter.present(event(SourceType.SMS, "INDBNK", sms, UploadStatus.FAILED_PERMANENTLY).copy(lastError = "HTTP 400"))
+        assertEquals(StatusKind.FAILED, failed.statusKind)
+        val done = EventPresenter.present(event(SourceType.SMS, "INDBNK", sms, UploadStatus.SYNCED).copy(lastError = "old error"))
+        assertEquals(StatusKind.DONE, done.statusKind)
+        assertNull(done.problem)
+    }
+
+    @Test
     fun rupeesUseIndianGrouping() {
         assertEquals("₹0.50", EventPresenter.rupees(BigDecimal("0.5")))
         assertEquals("₹999.00", EventPresenter.rupees(BigDecimal("999")))
