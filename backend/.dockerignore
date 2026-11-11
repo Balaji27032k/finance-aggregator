@@ -3,3 +3,5 @@ target/
 mvnw
 mvnw.cmd
 *.md
+dashboard/node_modules/
+src/main/resources/static/

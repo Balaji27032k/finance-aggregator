@@ -11,7 +11,7 @@
 - [ ] Phase 7 Kafka + outbox
 - [ ] Phase 8 Financial features
 - [ ] Phase 9 Oracle deployment
-- [ ] Phase 10 React dashboard
+- [~] Phase 10 Web dashboard: React app served by the backend at `/` (login, Overview, Insights, Transactions, Data health), admin-cookie login, categories and analytics computed on the server. Backend 50 tests green; UI checked in a browser against the `demo` profile (made-up data); not yet run on Render against the real data. The phone app also has new Overview / Transactions tabs with the same categories and grouping.
 - [ ] Phase 11 AI
 
 ## Environment (inspected 2026-11-10)
@@ -50,6 +50,16 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - Failures met and fixed: a missing `PAYLOAD_ENCRYPTION_KEY` was used as the literal text `${...}` (now blank and rejected at startup); nested config validation did not run without `@Valid` (fixed, 4 tests added).
 - First phone sync timed out (30 s read timeout against per-event transactions on a 0.1 CPU instance). Fixed with 10-event batches and a 120 s read timeout; the user then saw rows arriving in MySQL.
 - RISK: the encryption key and pairing code in use were placeholders (all-zero key). Rows stored so far are protected only by that weak key and need re-encryption or deletion before real data is relied on.
+
+## Web dashboard (2026-11-12)
+- Served by the same Spring Boot service (single Render service, no extra cost). `backend/dashboard` (Vite, React, TypeScript, Recharts) builds into `backend/src/main/resources/static`; the Dockerfile has a Node build stage, so nothing generated is committed.
+- Login: `POST /api/admin/login` with `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` (bcrypt) from the environment. Session is a random token in an HttpOnly, SameSite=Strict, Secure cookie, kept in memory on the server (sessions end on restart or after 12 hours). Login is limited to 5 tries per minute per IP, same as device registration. Without these two variables the login answers 503 and the dashboard stays closed. Phone tokens cannot open the dashboard API and the dashboard cookie cannot call phone endpoints.
+- Generate the hash: `cd backend; mvn -q -DskipTests package` then `java "-Dloader.main=com.personal.finance.tools.HashPassword" -cp target/finance-aggregator-backend-0.1.0-SNAPSHOT.jar org.springframework.boot.loader.launch.PropertiesLauncher` (typed at a hidden prompt; at least 12 characters).
+- API (admin cookie): `GET /api/admin/summary?from&to`, `/api/admin/transactions` (search, direction, category, source, amount range, sort, paging), `/api/admin/health`.
+- Categories are display-only labels from keyword rules on the payee and note (no stored renaming); unknown payees stay "Other". Days follow the date in the message, otherwise India time.
+- Try it without real data: `java -jar target/finance-aggregator-backend-0.1.0-SNAPSHOT.jar --spring.profiles.active=demo --server.port=8099`, open http://localhost:8099, user `demo`, password `demo-password` (in-memory database with made-up transactions; never use in production).
+- Frontend dev: `cd backend/dashboard; npm install; npm run dev` (proxies `/api` to localhost:8080).
+- Verified: backend 50 tests; `npm run build` clean; every page loaded in a browser against the demo profile with no console errors. NOT verified: behaviour on Render with real data and a real password.
 
 ## Decisions
 - Temporary analysis export: `message_staging` table (V3, drop when done) receives full SMS (alphanumeric senders only, OTP digits masked) and Gmail mail (finance-related query, job portals/YouTube/Google notifications filtered, Google Pay and Play receipts kept, body capped at 8000 chars, newest first, resumable). Gmail is read on the phone through the Google Authorization API (`gmail.readonly`, Android OAuth client by package + SHA-1); no secrets in the app. Verified by unit tests only (backend 32, Android 85); not yet run on the phone or against Google.

@@ -21,16 +21,17 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -116,28 +117,35 @@ class MainActivity : ComponentActivity() {
             checkGmail = viewModel::checkGmailNow,
         )
         setContent {
-            MaterialTheme {
+            FinanceTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
+                var openKey by rememberSaveable { mutableStateOf<String?>(null) }
                 val health by viewModel.health.collectAsStateWithLifecycle()
                 val events by viewModel.events.collectAsStateWithLifecycle()
+                val ledger by viewModel.ledger.collectAsStateWithLifecycle()
                 val sources by viewModel.sources.collectAsStateWithLifecycle()
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
                 val apps by viewModel.installedApps.collectAsStateWithLifecycle()
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
+                val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
 
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
-                            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Health") })
-                            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Events") })
+                            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview") })
+                            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions") })
+                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity") })
+                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health") })
                         }
                     },
                 ) { padding ->
                     val body = Modifier.padding(padding)
                     when (tab) {
-                        0 -> HealthScreen(health, pairingMessage, export, actions, body)
-                        1 -> EventsScreen(events, body)
+                        0 -> OverviewScreen(ledger, onOpen, onSeeAll = { tab = 1 }, modifier = body)
+                        1 -> TransactionsScreen(ledger, onOpen, body)
+                        2 -> EventsScreen(events, body)
+                        3 -> HealthScreen(health, pairingMessage, export, actions, body)
                         else -> SourcesScreen(
                             apps = apps,
                             appSources = sources,
@@ -148,6 +156,7 @@ class MainActivity : ComponentActivity() {
                             modifier = body,
                         )
                     }
+                    ledger.firstOrNull { it.key == openKey }?.let { TxnDetailSheet(it, onDismiss = { openKey = null }) }
                 }
             }
         }

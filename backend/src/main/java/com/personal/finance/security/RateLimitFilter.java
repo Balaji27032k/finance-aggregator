@@ -34,15 +34,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/actuator");
+        return !request.getRequestURI().startsWith("/api/");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean device = auth != null && auth.getPrincipal() instanceof DevicePrincipal;
-        String key = device ? "device:" + ((DevicePrincipal) auth.getPrincipal()).deviceId() : "ip:" + request.getRemoteAddr();
+        boolean device = auth != null && (auth.getPrincipal() instanceof DevicePrincipal || auth.getPrincipal() instanceof AdminPrincipal);
+        String key = auth != null && auth.getPrincipal() instanceof DevicePrincipal d ? "device:" + d.deviceId()
+                : device ? "admin" : "ip:" + request.getRemoteAddr();
         int limit = device ? deviceLimit : anonymousLimit;
 
         long nowSeconds = clock.instant().getEpochSecond();

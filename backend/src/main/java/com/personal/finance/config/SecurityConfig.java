@@ -1,6 +1,8 @@
 package com.personal.finance.config;
 
 import com.personal.finance.repository.SyncDeviceRepository;
+import com.personal.finance.security.AdminSessionFilter;
+import com.personal.finance.security.AdminSessions;
 import com.personal.finance.security.DeviceTokenFilter;
 import com.personal.finance.security.RateLimitFilter;
 import java.time.Clock;
@@ -13,6 +15,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -20,9 +24,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
+    PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SyncDeviceRepository devices, AppProperties properties,
-                                            Clock clock) throws Exception {
+                                            Clock clock, AdminSessions adminSessions) throws Exception {
         DeviceTokenFilter tokenFilter = new DeviceTokenFilter(devices);
+        AdminSessionFilter adminFilter = new AdminSessionFilter(adminSessions);
         RateLimitFilter rateLimitFilter = new RateLimitFilter(
                 properties.rateLimit().anonymousPerMinute(), properties.rateLimit().devicePerMinute(), clock);
 
@@ -34,15 +44,24 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/api/v1/devices/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/admin/login").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/**").hasRole("DEVICE")
+                        // The dashboard's static files and client-side routes.
+                        .requestMatchers(request -> "GET".equals(request.getMethod()) && !request.getRequestURI().startsWith("/api/"))
+                        .permitAll()
                         .anyRequest().denyAll())
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint((request, response, ex) -> problem(response, HttpStatus.UNAUTHORIZED))
                         .accessDeniedHandler((request, response, ex) -> problem(response, HttpStatus.FORBIDDEN)))
-                .headers(Customizer.withDefaults())
+                .headers(h -> h
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+                                        + "font-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")))
                 .addFilterBefore(tokenFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(rateLimitFilter, DeviceTokenFilter.class);
+                .addFilterAfter(adminFilter, DeviceTokenFilter.class)
+                .addFilterAfter(rateLimitFilter, AdminSessionFilter.class);
         return http.build();
     }
 

@@ -1,0 +1,15 @@
+# Local demo only: `--spring.profiles.active=demo`. In-memory database filled with made-up data.
+# Sign in with user "demo" and password "demo-password". Never use this profile in production.
+spring:
+  datasource:
+    url: jdbc:h2:mem:demo;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+
+app:
+  security:
+    pairing-code: demo-pairing-code
+    payload-encryption-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  admin:
+    username: demo
+    password-hash: "$2a$12$qeQGPNxbQvrAiY8ggnWsOuoay7wlDeg2.g0czP.rEmKYsU5N0U5ne"

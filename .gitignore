@@ -12,6 +12,10 @@ secrets/
 backend/target/
 *.log
 
+# Dashboard (built by Vite into the backend's static folder)
+backend/dashboard/node_modules/
+backend/src/main/resources/static/
+
 # Android
 android/.gradle/
 android/build/

@@ -24,3 +24,6 @@ app:
     # Empty default: a missing variable fails validation at startup instead of becoming the literal text "${NAME}".
     pairing-code: ${DEVICE_PAIRING_CODE:}
     payload-encryption-key: ${PAYLOAD_ENCRYPTION_KEY:}
+  admin:
+    username: ${ADMIN_USERNAME:admin}
+    password-hash: ${ADMIN_PASSWORD_HASH:}

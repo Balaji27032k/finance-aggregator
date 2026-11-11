@@ -63,7 +63,7 @@ class IngestionFlowTest {
 
     @Test
     void unknownPathsAreDeniedWithoutAuthentication() throws Exception {
-        mvc.perform(get("/something-else")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/something-else")).andExpect(status().isUnauthorized());
     }
 
     @Test

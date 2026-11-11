@@ -33,4 +33,19 @@ public interface FinancialTransactionRepository extends JpaRepository<FinancialT
     List<Long> findGroupIds(@Param("from") Instant from, @Param("to") Instant to, Pageable page);
 
     List<FinancialTransaction> findByGroupIdIn(Collection<Long> groupIds);
+
+    @Query("select t.sourceType, count(t), max(t.eventTimestamp) from FinancialTransaction t group by t.sourceType")
+    List<Object[]> countBySource();
+
+    @Query("select t.bankCode, count(t), max(t.eventTimestamp) from FinancialTransaction t group by t.bankCode")
+    List<Object[]> countByBank();
+
+    @Query("select t.groupId from FinancialTransaction t group by t.groupId having count(distinct t.sourceType) > 1")
+    List<Long> findMultiChannelGroupIds();
+
+    @Query("select count(distinct t.groupId) from FinancialTransaction t")
+    long countGroups();
+
+    @Query("select min(t.eventTimestamp) from FinancialTransaction t")
+    Instant earliestEvent();
 }

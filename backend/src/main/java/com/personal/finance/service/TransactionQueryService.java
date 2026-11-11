@@ -46,13 +46,16 @@ public class TransactionQueryService {
         List<TransactionView.Source> sources = ordered.stream()
                 .map(t -> new TransactionView.Source(t.getSourceType() == null ? "UNKNOWN" : t.getSourceType().name(), t.getBankCode()))
                 .toList();
+        String counterparty = pick(ordered, FinancialTransaction::getCounterparty);
+        String mode = pick(ordered, FinancialTransaction::getPaymentMode);
+        String note = pick(ordered, FinancialTransaction::getNote);
         return new TransactionView(
                 first.getGroupId(), first.getDirection(), first.getAmount(), first.getCurrency(),
                 pick(ordered, FinancialTransaction::getTransactionDate), earliest,
-                pick(ordered, FinancialTransaction::getCounterparty), pick(ordered, FinancialTransaction::getCounterpartyAccountLast4),
-                pick(ordered, FinancialTransaction::getAccountLast4), pick(ordered, FinancialTransaction::getPaymentMode),
+                counterparty, pick(ordered, FinancialTransaction::getCounterpartyAccountLast4),
+                pick(ordered, FinancialTransaction::getAccountLast4), mode,
                 pick(ordered, FinancialTransaction::getReferenceNo), pick(ordered, FinancialTransaction::getBalanceAfter),
-                pick(ordered, FinancialTransaction::getNote), sources);
+                note, Categorizer.categorize(first.getDirection(), counterparty, mode, note), sources);
     }
 
     private static int rank(SourceType type) {

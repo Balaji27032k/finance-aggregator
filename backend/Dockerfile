@@ -1,7 +1,16 @@
+# The web dashboard is built first; Vite writes it to ../src/main/resources/static relative to the dashboard folder.
+FROM node:22-slim AS web
+WORKDIR /web/dashboard
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY dashboard/ ./
+RUN npm run build
+
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
 COPY pom.xml .
 COPY src ./src
+COPY --from=web /web/src/main/resources/static ./src/main/resources/static
 RUN mvn -B -q -DskipTests package && cp target/finance-aggregator-backend-*.jar /app.jar
 
 FROM eclipse-temurin:21-jre

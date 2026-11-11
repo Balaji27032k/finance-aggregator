@@ -13,6 +13,8 @@ import com.personal.financecollector.ConfigKeys
 import com.personal.financecollector.FinanceApp
 import com.personal.financecollector.StatusKeys
 import com.personal.financecollector.collector.NotificationCollector
+import com.personal.financecollector.collector.ParsedTransaction
+import com.personal.financecollector.collector.TransactionParser
 import com.personal.financecollector.collector.SmsPermission
 import com.personal.financecollector.collector.SmsSender
 import com.personal.financecollector.database.CollectionStatusEntity
@@ -37,6 +39,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -45,6 +48,8 @@ import kotlinx.coroutines.withContext
 import java.time.ZonedDateTime
 
 data class InstalledApp(val packageName: String, val label: String)
+
+private const val LEDGER_EVENTS = 6000
 
 data class SmsScanUi(
     val health: SourceHealth,
@@ -127,6 +132,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val events: StateFlow<List<RawFinancialEventEntity>> = db.eventDao().observeRecent(200)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Every understood transaction on the phone, merged across SMS, e-mail and notifications. Parsed off the main thread. */
+    private val parsedCache = HashMap<String, ParsedTransaction?>()
+    val ledger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
+        .map { all ->
+            LedgerBuilder.build(all) { e ->
+                if (parsedCache.containsKey(e.localEventId)) parsedCache[e.localEventId]
+                else TransactionParser.parse(e).also { parsedCache[e.localEventId] = it }
+            }
+        }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val systemState = tick.map { readSystemState() }
