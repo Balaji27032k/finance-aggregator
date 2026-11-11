@@ -49,6 +49,7 @@ import com.google.android.gms.common.api.ApiException
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
+    private val adminViewModel: AdminViewModel by viewModels()
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -161,9 +162,10 @@ class MainActivity : ComponentActivity() {
                         1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
                         2 -> EventsScreen(events, uploadProblems, body)
                         3 -> AdminScreen(
-                            backendUrl = health?.cloud?.takeIf { it.paired }?.backendUrl,
-                            onOpen = ::openDashboard,
-                            onCopy = ::copyLink,
+                            vm = adminViewModel,
+                            paired = health?.cloud?.paired == true,
+                            budget = budget,
+                            onSetBudget = viewModel::setBudget,
                             modifier = body,
                         )
                         4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
@@ -181,22 +183,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-    }
-
-    private fun openDashboard(url: String) {
-        val uri = Uri.parse(url)
-        if (uri.scheme != "https") return
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW, uri))
-        } catch (_: android.content.ActivityNotFoundException) {
-            Toast.makeText(this, "No browser found to open the dashboard", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun copyLink(url: String) {
-        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Dashboard link", url))
-        Toast.makeText(this, "Link copied", Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {

@@ -122,25 +122,7 @@ fun OverviewScreen(
             }
         }
         if (stats.topPayees.isNotEmpty()) {
-            item {
-                InfoCard("Top payees") {
-                    val max = stats.topPayees.first().total.toFloat().coerceAtLeast(1f)
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        stats.topPayees.forEach { p ->
-                            Column {
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(prettyName(p.key), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text(rupeesWhole(p.total), fontWeight = FontWeight.SemiBold)
-                                }
-                                LinearProgressIndicator(
-                                    progress = { p.total.toFloat() / max },
-                                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(6.dp).clip(RoundedCornerShape(3.dp)),
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            item { TopPayeesCard("Top payees", stats.topPayees) }
         }
         item {
             InfoCard("Recent") {
@@ -183,11 +165,32 @@ private fun AnimatedRupees(value: BigDecimal, style: androidx.compose.ui.text.Te
 }
 
 @Composable
-private fun InfoCard(title: String, content: @Composable () -> Unit) {
+internal fun InfoCard(title: String, content: @Composable () -> Unit) {
     Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp))
             content()
+        }
+    }
+}
+
+@Composable
+internal fun TopPayeesCard(title: String, items: List<Bucket>) {
+    InfoCard(title) {
+        val max = items.first().total.toFloat().coerceAtLeast(1f)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items.forEach { p ->
+                Column {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(prettyName(p.key), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Text(rupeesWhole(p.total), fontWeight = FontWeight.SemiBold)
+                    }
+                    LinearProgressIndicator(
+                        progress = { p.total.toFloat() / max },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp).height(6.dp).clip(RoundedCornerShape(3.dp)),
+                    )
+                }
+            }
         }
     }
 }
@@ -197,7 +200,7 @@ private fun percentChange(current: BigDecimal, previous: BigDecimal): Int? =
     else current.subtract(previous).multiply(BigDecimal(100)).divide(previous, 0, RoundingMode.HALF_UP).toInt()
 
 @Composable
-private fun HeroCard(stats: Stats) {
+internal fun HeroCard(stats: Stats) {
     val gradient = Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary))
     val onPrimary = MaterialTheme.colorScheme.onPrimary
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(gradient).padding(20.dp)) {
@@ -239,7 +242,7 @@ private fun HeroCard(stats: Stats) {
 }
 
 @Composable
-private fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
+internal fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
     val total = stats.byCategory.sumOf { it.total }
     InfoCard("Where it went (tap to see)") {
         CategoryStack(stats.byCategory)
@@ -264,7 +267,7 @@ private fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
 }
 
 @Composable
-private fun PaceCard(pace: MonthPace, budget: Long?, onSetBudget: (Long?) -> Unit) {
+internal fun PaceCard(pace: MonthPace, budget: Long?, onSetBudget: (Long?) -> Unit) {
     var editing by remember { mutableStateOf(false) }
     InfoCard("This month's pace") {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
