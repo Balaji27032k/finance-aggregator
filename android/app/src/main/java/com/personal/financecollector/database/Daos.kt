@@ -120,6 +120,23 @@ abstract class EventDao {
         resetBackoff(now)
     }
 
+    @Query(
+        "INSERT OR IGNORE INTO pending_uploads (localEventId, enqueuedAt, nextAttemptAt, attempts) " +
+            "SELECT localEventId, :now, :now, 0 FROM raw_financial_events WHERE uploadStatus = 'SYNCED'",
+    )
+    abstract suspend fun enqueueSyncedForResend(now: Long)
+
+    @Query("UPDATE raw_financial_events SET uploadStatus = 'PENDING', retryCount = 0, lastError = NULL, ackTimestamp = NULL WHERE uploadStatus = 'SYNCED'")
+    abstract suspend fun requeueSynced()
+
+    /** Queues every stored event again; the backend ignores any it already has. */
+    @Transaction
+    open suspend fun resendAll(now: Long) {
+        enqueueSyncedForResend(now)
+        requeueSynced()
+        requeueFailed(now)
+    }
+
     @Transaction
     open suspend fun acknowledge(id: String, ackAt: Long) {
         markSynced(id, ackAt)

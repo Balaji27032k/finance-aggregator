@@ -283,6 +283,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun resendAll() {
+        viewModelScope.launch {
+            db.eventDao().resendAll(System.currentTimeMillis())
+            UploadScheduler.enqueueNow(getApplication())
+        }
+    }
+
     fun setPaused(paused: Boolean) {
         viewModelScope.launch { db.configDao().set(ConfigKeys.COLLECTION_PAUSED, paused.toString()) }
     }

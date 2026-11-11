@@ -50,6 +50,7 @@ data class HealthActions(
     val unpair: () -> Unit,
     val syncNow: () -> Unit,
     val retryFailed: () -> Unit,
+    val resendAll: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -191,6 +192,7 @@ private fun CloudCard(cloud: CloudUi, pairingMessage: String?, actions: HealthAc
                     OutlinedButton(onClick = actions.retryFailed) { Text("Retry ${cloud.needsAttention} failed") }
                 }
             }
+            TextButton(onClick = actions.resendAll) { Text("Re-upload everything") }
             TextButton(onClick = actions.unpair) { Text("Unpair") }
         }
     }

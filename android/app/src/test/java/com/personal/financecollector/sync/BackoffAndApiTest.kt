@@ -52,9 +52,25 @@ class BackoffAndApiTest {
         assertEquals("VM-SBIUPI-S", item.getString("sourceSender"))
         assertEquals("src-evt-1", item.getString("sourceEventId"))
         assertEquals("2023-11-14T22:13:20Z", item.getString("eventTimestamp"))
-        assertEquals("Rs 10 debited", item.getString("payload"))
-        assertEquals("UNPARSED", item.getString("parserStatus"))
-        assertEquals("raw-1", item.getString("parserVersion"))
+        assertEquals("hash-evt-1", item.getString("payloadHash"))
+        assertEquals(false, item.has("payload"))
+        assertEquals("PARSED", item.getString("parserStatus"))
+        assertEquals("sms-1", item.getString("parserVersion"))
+        val t = item.getJSONObject("transaction")
+        assertEquals("DEBIT", t.getString("direction"))
+        assertEquals("10.00", t.getString("amount"))
+        assertEquals("INR", t.getString("currency"))
+        assertEquals("SBIUPI", t.getString("bankCode"))
+        assertTrue(t.isNull("counterparty"))
+    }
+
+    @Test
+    fun theMessageTextIsNeverInTheRequest() {
+        val body = "Sent Rs.6.00 from A/c *0000 on 09-11-26 to Sample Merchant.RRN 000000000001.Avl Bal Rs.100.00.Not you?SMS BLOCK to 9289592895-Indian Bank"
+        val json = BackendApi.buildBatchJson(listOf(testEvent("m").copy(sourceApplication = "INDBNK", rawPayload = body)))
+        assertTrue(!json.contains("Not you"))
+        assertTrue(!json.contains("SMS BLOCK"))
+        assertTrue(json.contains("Sample Merchant"))
     }
 
     @Test

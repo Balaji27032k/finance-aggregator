@@ -20,9 +20,14 @@ Request (`/events/batch`, max 100 items):
   "localEventId": "uuid", "sourceType": "NOTIFICATION|SMS|GMAIL|MANUAL",
   "sourceApplication": "com.google.android.apps.nbu.paisa.user", "sourceSender": null,
   "sourceEventId": "stable-id", "eventTimestamp": "2026-11-10T08:15:00Z",
-  "capturedTimestamp": "2026-11-10T08:15:02Z", "payload": "relevant text only",
-  "parserStatus": "PARSED|NEEDS_REVIEW", "parserVersion": "1" } ] }
+  "capturedTimestamp": "2026-11-10T08:15:02Z", "payloadHash": "64-char sha-256 of the message",
+  "transaction": { "direction": "DEBIT|CREDIT", "amount": "413.00", "currency": "INR",
+    "accountLast4": "0000", "counterparty": "SAMPLE STORES", "counterpartyAccountLast4": null,
+    "paymentMode": "UPI|NEFT|IMPS|RTGS|ATM|null", "referenceNo": "000000000003", "balanceAfter": "1200.50",
+    "transactionDate": "2026-10-30", "bankCode": "SBIUPI", "note": null },
+  "parserStatus": "PARSED", "parserVersion": "sms-1" } ] }
 ```
+The message text is parsed on the phone and never sent. Messages the parser does not recognise stay on the phone (NEEDS_REVIEW) and are not uploaded.
 Response:
 ```json
 { "results": [ { "localEventId": "uuid", "status": "ACCEPTED|DUPLICATE|REJECTED",

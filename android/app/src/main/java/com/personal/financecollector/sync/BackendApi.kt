@@ -1,5 +1,8 @@
 package com.personal.financecollector.sync
 
+import com.personal.financecollector.collector.ParsedTransaction
+import com.personal.financecollector.collector.TransactionParser
+import com.personal.financecollector.database.ParserStatus
 import com.personal.financecollector.database.RawFinancialEventEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -96,6 +99,7 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
         fun buildBatchJson(events: List<RawFinancialEventEntity>): String {
             val array = JSONArray()
             events.forEach { e ->
+                val t = TransactionParser.parse(e) ?: return@forEach
                 array.put(
                     JSONObject()
                         .put("localEventId", e.localEventId)
@@ -105,13 +109,28 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
                         .put("sourceEventId", e.sourceEventId)
                         .put("eventTimestamp", Instant.ofEpochMilli(e.eventTimestamp).toString())
                         .put("capturedTimestamp", Instant.ofEpochMilli(e.capturedTimestamp).toString())
-                        .put("payload", e.rawPayload)
-                        .put("parserStatus", e.parserStatus.name)
-                        .put("parserVersion", e.parserVersion),
+                        .put("payloadHash", e.payloadHash)
+                        .put("transaction", transactionJson(t))
+                        .put("parserStatus", ParserStatus.PARSED.name)
+                        .put("parserVersion", TransactionParser.VERSION),
                 )
             }
             return JSONObject().put("events", array).toString()
         }
+
+        private fun transactionJson(t: ParsedTransaction): JSONObject = JSONObject()
+            .put("direction", t.direction)
+            .put("amount", t.amount.toPlainString())
+            .put("currency", t.currency)
+            .put("accountLast4", t.accountLast4 ?: JSONObject.NULL)
+            .put("counterparty", t.counterparty ?: JSONObject.NULL)
+            .put("counterpartyAccountLast4", t.counterpartyAccountLast4 ?: JSONObject.NULL)
+            .put("paymentMode", t.paymentMode ?: JSONObject.NULL)
+            .put("referenceNo", t.referenceNo ?: JSONObject.NULL)
+            .put("balanceAfter", t.balanceAfter?.toPlainString() ?: JSONObject.NULL)
+            .put("transactionDate", t.transactionDate?.toString() ?: JSONObject.NULL)
+            .put("bankCode", t.bankCode)
+            .put("note", t.note ?: JSONObject.NULL)
 
         fun parseBatchResults(body: String): List<ItemResult>? = try {
             val array = JSONObject(body).getJSONArray("results")

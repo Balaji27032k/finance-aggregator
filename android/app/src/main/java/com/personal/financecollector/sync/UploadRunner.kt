@@ -1,6 +1,7 @@
 package com.personal.financecollector.sync
 
 import com.personal.financecollector.ConfigKeys
+import com.personal.financecollector.collector.TransactionParser
 import com.personal.financecollector.database.ConfigDao
 import com.personal.financecollector.database.EventDao
 import com.personal.financecollector.database.RawFinancialEventEntity
@@ -75,8 +76,12 @@ class UploadRunner(
         config.set(ConfigKeys.SYNC_LAST_ATTEMPT_AT, clock().toString())
 
         while (true) {
-            val batch = store.dueForUpload(clock(), BATCH_SIZE)
-            if (batch.isEmpty()) break
+            val due = store.dueForUpload(clock(), BATCH_SIZE)
+            if (due.isEmpty()) break
+            // Only extracted facts are uploaded; messages the parser cannot read stay on the phone for review.
+            val (batch, unreadable) = due.partition { TransactionParser.parse(it) != null }
+            unreadable.forEach { store.markNeedsReview(it.localEventId, NOT_UNDERSTOOD) }
+            if (batch.isEmpty()) continue
             val ids = batch.map { it.localEventId }
             store.markUploading(ids)
 
@@ -133,5 +138,6 @@ class UploadRunner(
         // The backend commits one transaction per event over a remote database, so large batches outlast the timeout.
         const val BATCH_SIZE = 10
         const val UNAUTHORIZED = "unauthorized"
+        const val NOT_UNDERSTOOD = "message format not recognised yet"
     }
 }

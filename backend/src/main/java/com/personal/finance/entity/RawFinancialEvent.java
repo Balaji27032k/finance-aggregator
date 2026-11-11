@@ -1,8 +1,6 @@
 package com.personal.finance.entity;
 
-import com.personal.finance.common.EncryptedStringConverter;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -45,10 +43,6 @@ public class RawFinancialEvent {
     @Column(name = "captured_timestamp", nullable = false, updatable = false)
     private Instant capturedTimestamp;
 
-    @Convert(converter = EncryptedStringConverter.class)
-    @Column(name = "raw_payload", nullable = false, updatable = false)
-    private String rawPayload;
-
     @Column(name = "payload_hash", nullable = false, updatable = false)
     private String payloadHash;
 
@@ -74,7 +68,7 @@ public class RawFinancialEvent {
 
     public RawFinancialEvent(Long deviceId, String localEventId, SourceType sourceType, String sourceApplication,
                              String sourceSender, String sourceEventId, Instant eventTimestamp,
-                             Instant capturedTimestamp, String rawPayload, String payloadHash,
+                             Instant capturedTimestamp, String payloadHash,
                              ParserStatus parserStatus, String parserVersion, Instant now) {
         this.deviceId = deviceId;
         this.localEventId = localEventId;
@@ -84,7 +78,6 @@ public class RawFinancialEvent {
         this.sourceEventId = sourceEventId;
         this.eventTimestamp = eventTimestamp;
         this.capturedTimestamp = capturedTimestamp;
-        this.rawPayload = rawPayload;
         this.payloadHash = payloadHash;
         this.parserStatus = parserStatus;
         this.parserVersion = parserVersion;

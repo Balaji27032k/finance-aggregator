@@ -1,13 +1,14 @@
 package com.personal.finance.service;
 
-import com.personal.finance.common.Hashing;
 import com.personal.finance.dto.EventItem;
 import com.personal.finance.dto.EventStatusResponse;
 import com.personal.finance.dto.IngestResult;
+import com.personal.finance.entity.FinancialTransaction;
 import com.personal.finance.entity.OutboxEvent;
 import com.personal.finance.entity.RawFinancialEvent;
 import com.personal.finance.exception.ResourceNotFoundException;
 import com.personal.finance.exception.ServiceUnavailableException;
+import com.personal.finance.repository.FinancialTransactionRepository;
 import com.personal.finance.repository.OutboxEventRepository;
 import com.personal.finance.repository.RawFinancialEventRepository;
 import jakarta.validation.ConstraintViolation;
@@ -34,14 +35,17 @@ public class EventIngestionService {
 
     private final RawFinancialEventRepository events;
     private final OutboxEventRepository outbox;
+    private final FinancialTransactionRepository ledger;
     private final TransactionTemplate transactions;
     private final Validator validator;
     private final Clock clock;
 
     public EventIngestionService(RawFinancialEventRepository events, OutboxEventRepository outbox,
-                                 TransactionTemplate transactions, Validator validator, Clock clock) {
+                                 FinancialTransactionRepository ledger, TransactionTemplate transactions,
+                                 Validator validator, Clock clock) {
         this.events = events;
         this.outbox = outbox;
+        this.ledger = ledger;
         this.transactions = transactions;
         this.validator = validator;
         this.clock = clock;
@@ -91,8 +95,9 @@ public class EventIngestionService {
         Instant now = clock.instant();
         RawFinancialEvent saved = events.saveAndFlush(new RawFinancialEvent(
                 deviceId, item.localEventId(), item.sourceType(), item.sourceApplication(), item.sourceSender(),
-                item.sourceEventId(), item.eventTimestamp(), item.capturedTimestamp(), item.payload(),
-                Hashing.sha256Hex(item.payload()), item.parserStatus(), item.parserVersion(), now));
+                item.sourceEventId(), item.eventTimestamp(), item.capturedTimestamp(), item.payloadHash(),
+                item.parserStatus(), item.parserVersion(), now));
+        ledger.save(new FinancialTransaction(saved.getId(), deviceId, item.transaction(), item.eventTimestamp(), now));
         outbox.save(OutboxEvent.rawEventReceived(saved.getId(), now));
         return IngestResult.accepted(item.localEventId(), saved.getId());
     }

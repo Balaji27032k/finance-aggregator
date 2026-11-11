@@ -35,12 +35,22 @@ final class TestSupport {
         return "src-" + UUID.randomUUID();
     }
 
-    static String event(String localId, String sourceEventId, String payload) {
+    static final String HASH = "a".repeat(64);
+
+    static String event(String localId, String sourceEventId, String counterparty) {
+        return event(localId, sourceEventId, "500.00", counterparty);
+    }
+
+    static String event(String localId, String sourceEventId, String amount, String counterparty) {
         return """
                 {"localEventId":"%s","sourceType":"SMS","sourceApplication":"SBIUPI","sourceSender":"VM-SBIUPI-S",
                  "sourceEventId":"%s","eventTimestamp":"2026-11-10T08:15:00Z","capturedTimestamp":"2026-11-10T08:15:02Z",
-                 "payload":"%s","parserStatus":"UNPARSED","parserVersion":"raw-1"}"""
-                .formatted(localId, sourceEventId, payload);
+                 "payloadHash":"%s",
+                 "transaction":{"direction":"DEBIT","amount":"%s","currency":"INR","accountLast4":"0000",
+                  "counterparty":"%s","paymentMode":"UPI","referenceNo":"000000000003","balanceAfter":"1200.50",
+                  "transactionDate":"2026-10-30","bankCode":"SBIUPI","note":"sample note"},
+                 "parserStatus":"PARSED","parserVersion":"sms-1"}"""
+                .formatted(localId, sourceEventId, HASH, amount, counterparty);
     }
 
     static MockHttpServletRequestBuilder ingest(Device device, String json) {

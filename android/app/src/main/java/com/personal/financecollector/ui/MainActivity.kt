@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
             unpair = viewModel::unpair,
             syncNow = viewModel::syncNow,
             retryFailed = viewModel::retryFailed,
+            resendAll = viewModel::resendAll,
         )
         setContent {
             MaterialTheme {

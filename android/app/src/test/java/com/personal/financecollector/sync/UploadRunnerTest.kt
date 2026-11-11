@@ -159,6 +159,18 @@ class UploadRunnerTest {
     }
 
     @Test
+    fun messagesTheParserCannotReadStayOnThePhoneForReview() = runBlocking {
+        store.add(testEvent("ok", capturedAt = 1))
+        store.add(testEvent("odd", capturedAt = 2).copy(rawPayload = "Your statement is ready"))
+        val api = FakeApi(ackAll())
+        assertEquals(RunResult.Idle, runner(api).run())
+        assertEquals(listOf(listOf("ok")), api.calls)
+        assertEquals(UploadStatus.SYNCED, store.status("ok"))
+        assertEquals(UploadStatus.NEEDS_REVIEW, store.status("odd"))
+        assertEquals(UploadRunner.NOT_UNDERSTOOD, store.rows.getValue("odd").error)
+    }
+
+    @Test
     fun largeBacklogsAreSentInBatchesOfTen() = runBlocking {
         (1..25).forEach { store.add(testEvent("e$it", capturedAt = it.toLong())) }
         val api = FakeApi(ackAll())

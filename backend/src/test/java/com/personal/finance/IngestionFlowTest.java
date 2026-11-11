@@ -89,21 +89,59 @@ class IngestionFlowTest {
     }
 
     @Test
-    void payloadIsEncryptedAtRestAndAnOutboxRowIsPending() throws Exception {
+    void duplicateUploadsDoNotCreateASecondTransaction() throws Exception {
         Device device = register(mvc);
-        String body = mvc.perform(ingest(device, event("local-2", uniqueSourceId(), "Rs 777 credited by SAMPLE PERSON")))
+        String json = event("local-dup", uniqueSourceId(), "SAMPLE STORES");
+        mvc.perform(ingest(device, json)).andExpect(jsonPath("$.status").value("ACCEPTED"));
+        mvc.perform(ingest(device, json)).andExpect(jsonPath("$.status").value("DUPLICATE"));
+
+        Integer rows = jdbc.queryForObject("select count(*) from financial_transactions t join raw_financial_events e "
+                + "on e.id = t.raw_event_id where e.local_event_id = 'local-dup'", Integer.class);
+        assertThat(rows).isEqualTo(1);
+    }
+
+    @Test
+    void extractedFieldsAreStoredAsColumnsAndNoMessageTextIsKept() throws Exception {
+        Device device = register(mvc);
+        String body = mvc.perform(ingest(device, event("local-2", uniqueSourceId(), "777.25", "SAMPLE PERSON")))
                 .andReturn().getResponse().getContentAsString();
         Number serverId = JsonPath.read(body, "$.serverEventId");
 
-        String stored = jdbc.queryForObject("select raw_payload from raw_financial_events where id = ?",
-                String.class, serverId.longValue());
-        assertThat(stored).startsWith("v1:").doesNotContain("777").doesNotContain("SAMPLE");
+        var row = jdbc.queryForMap("select * from financial_transactions where raw_event_id = ?", serverId.longValue());
+        assertThat(row.get("direction")).isEqualTo("DEBIT");
+        assertThat(row.get("amount").toString()).isEqualTo("777.25");
+        assertThat(row.get("currency")).isEqualTo("INR");
+        assertThat(row.get("account_last4")).isEqualTo("0000");
+        assertThat(row.get("counterparty")).isEqualTo("SAMPLE PERSON");
+        assertThat(row.get("payment_mode")).isEqualTo("UPI");
+        assertThat(row.get("reference_no")).isEqualTo("000000000003");
+        assertThat(row.get("balance_after").toString()).isEqualTo("1200.50");
+        assertThat(row.get("transaction_date").toString()).isEqualTo("2026-10-30");
+        assertThat(row.get("bank_code")).isEqualTo("SBIUPI");
+        assertThat(row.get("note")).isEqualTo("sample note");
+
+        Integer messageColumns = jdbc.queryForObject("select count(*) from information_schema.columns "
+                + "where table_name = 'raw_financial_events' and column_name = 'raw_payload'", Integer.class);
+        assertThat(messageColumns).isZero();
+
         String outboxStatus = jdbc.queryForObject("select status from outbox_events where aggregate_id = ?",
                 String.class, serverId.longValue());
         assertThat(outboxStatus).isEqualTo("PENDING");
         String processing = jdbc.queryForObject("select processing_status from raw_financial_events where id = ?",
                 String.class, serverId.longValue());
         assertThat(processing).isEqualTo("RECEIVED");
+    }
+
+    @Test
+    void aTransactionWithoutAPositiveAmountOrDetailsIsRejected() throws Exception {
+        Device device = register(mvc);
+        mvc.perform(ingest(device, event("local-neg", uniqueSourceId(), "-5.00", "X")))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.reason").value("invalid fields: transaction.amount"));
+        String full = event("local-none", uniqueSourceId(), "X");
+        String noTransaction = full.substring(0, full.indexOf("\"transaction\"")) + full.substring(full.indexOf("\"parserStatus\""));
+        mvc.perform(ingest(device, noTransaction)).andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.reason").value("invalid fields: transaction"));
     }
 
     @Test
