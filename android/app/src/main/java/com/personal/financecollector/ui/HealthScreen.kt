@@ -57,6 +57,7 @@ data class HealthActions(
     val connectGmail: () -> Unit,
     val fetchGmail: () -> Unit,
     val fetchNotifications: () -> Unit,
+    val checkGmail: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -140,6 +141,8 @@ fun HealthScreen(
 
         item { CloudCard(state.cloud, pairingMessage, actions) }
 
+        item { GmailCard(state.gmail, actions) }
+
         if (showExportTools) item { ExportCard(export, actions) }
 
         items(state.unavailableSources) { SourceCard(it) {} }
@@ -186,6 +189,27 @@ fun HealthScreen(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
         )
+    }
+}
+
+@Composable
+private fun GmailCard(gmail: GmailUi, actions: HealthActions) {
+    Card {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Gmail (bank alert e-mails)", style = MaterialTheme.typography.titleMedium)
+            when {
+                !gmail.connected -> Text("Not connected. Connect once so bank e-mails add the payee name and your remark to each transaction.", style = MaterialTheme.typography.bodySmall)
+                gmail.status == "NEEDS_CONNECT" -> Text("Google asked you to sign in again. Reconnect to keep reading bank e-mails.", style = MaterialTheme.typography.bodySmall)
+                else -> Text("Connected. Last check: ${formatTime(gmail.lastCheckAt)}. Bank e-mails captured: ${gmail.captured}." + (gmail.status?.takeIf { it != "OK" }?.let { " $it" } ?: ""), style = MaterialTheme.typography.bodySmall)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!gmail.connected || gmail.status == "NEEDS_CONNECT") {
+                    Button(onClick = actions.connectGmail) { Text(if (gmail.connected) "Reconnect Gmail" else "Connect Gmail") }
+                } else {
+                    OutlinedButton(onClick = actions.checkGmail) { Text("Check now") }
+                }
+            }
+        }
     }
 }
 

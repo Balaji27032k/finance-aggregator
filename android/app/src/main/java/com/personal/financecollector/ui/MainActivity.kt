@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
             connectGmail = ::connectGmail,
             fetchGmail = viewModel::fetchGmail,
             fetchNotifications = viewModel::fetchNotifications,
+            checkGmail = viewModel::checkGmailNow,
         )
         setContent {
             MaterialTheme {

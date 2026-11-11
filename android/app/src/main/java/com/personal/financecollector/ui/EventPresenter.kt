@@ -46,6 +46,7 @@ object EventPresenter {
     fun sourceLabel(event: RawFinancialEventEntity): String = when (event.sourceType) {
         SourceType.NOTIFICATION -> NotificationApps.shortName(event.sourceApplication)
         SourceType.SMS -> event.sourceApplication
+        SourceType.GMAIL -> "Email ${event.sourceApplication}"
         else -> event.sourceType.name
     }
 

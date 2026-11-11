@@ -5,8 +5,10 @@ import com.personal.finance.entity.FinancialTransaction;
 import com.personal.finance.entity.SourceType;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -24,4 +26,11 @@ public interface FinancialTransactionRepository extends JpaRepository<FinancialT
                                                           @Param("from") Instant from, @Param("to") Instant to);
 
     boolean existsByGroupIdAndSourceType(Long groupId, SourceType sourceType);
+
+    /** Newest groups first; a group is placed by its latest row. */
+    @Query("select t.groupId from FinancialTransaction t where t.eventTimestamp >= :from and t.eventTimestamp < :to "
+            + "group by t.groupId order by max(t.eventTimestamp) desc")
+    List<Long> findGroupIds(@Param("from") Instant from, @Param("to") Instant to, Pageable page);
+
+    List<FinancialTransaction> findByGroupIdIn(Collection<Long> groupIds);
 }

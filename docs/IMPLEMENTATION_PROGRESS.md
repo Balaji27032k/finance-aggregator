@@ -6,8 +6,8 @@
 - [~] Phase 2 Spring Boot ingestion: built, 27 tests pass on H2; deployed on Render and writing to Aiven MySQL (user-observed); duplicate and encrypted-at-rest checks on the live DB still to be confirmed
 - [~] Phase 3 Android cloud sync: built, 58 Android unit tests pass; paired and uploading to the Render backend from the phone (user-observed in the DB)
 - [~] Phase 4 SMS + historical scan: code built, 31 unit tests pass; on-device verification pending
-- [ ] Phase 5 Gmail
-- [ ] Phase 6 Normalization + dedup
+- [~] Phase 5 Gmail: bank alert e-mails (CSB, SBI NEFT and YONO) are read every 30 minutes on the phone, parsed and uploaded like SMS; unit-tested, not yet run live. Login expires every 7 days while the Google app is in Testing mode.
+- [~] Phase 6 Normalization + dedup: parsers for SMS, notifications and e-mail; cross-channel `group_id` (reference match, then 3-minute match); `GET /api/v1/transactions` returns one merged entry per transaction. No categories yet; values are used as received (no name or account aliasing). Own-account transfers are simply a debit plus a credit.
 - [ ] Phase 7 Kafka + outbox
 - [ ] Phase 8 Financial features
 - [ ] Phase 9 Oracle deployment

@@ -28,6 +28,7 @@ import com.personal.financecollector.service.CollectionHealth
 import com.personal.financecollector.service.SmsScanState
 import com.personal.financecollector.service.SourceHealth
 import com.personal.financecollector.sync.BackendApi
+import com.personal.financecollector.sync.BankMailScheduler
 import com.personal.financecollector.sync.RegisterOutcome
 import com.personal.financecollector.sync.SmsScanScheduler
 import com.personal.financecollector.sync.UploadScheduler
@@ -65,10 +66,13 @@ data class CloudUi(
     val needsAttention: Int,
 )
 
+data class GmailUi(val connected: Boolean, val status: String?, val lastCheckAt: Long?, val captured: Int)
+
 data class HealthUiState(
     val notification: SourceHealth,
     val sms: SmsScanUi,
     val cloud: CloudUi,
+    val gmail: GmailUi,
     val unavailableSources: List<SourceHealth>,
     val enabledApps: List<String>,
     val lastEventAt: Long?,
@@ -204,11 +208,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    val health: StateFlow<HealthUiState?> = combine(core, smsUi, smsDroppedFiltered, cloudUi) { c, sms, smsFiltered, cloud ->
+    private val gmailUi = combine(
+        db.configDao().observe(ConfigKeys.GMAIL_CONNECTED),
+        db.configDao().observe(ConfigKeys.GMAIL_BANK_STATUS),
+        db.configDao().observe(ConfigKeys.GMAIL_BANK_LAST_CHECK),
+        db.configDao().observe(ConfigKeys.GMAIL_BANK_CAPTURED),
+    ) { connected, status, last, captured ->
+        GmailUi(connected == "true", status?.takeIf { it.isNotBlank() }, last?.toLongOrNull(), captured?.toIntOrNull() ?: 0)
+    }
+
+    val health: StateFlow<HealthUiState?> = combine(core, smsUi, smsDroppedFiltered, cloudUi, gmailUi) { c, sms, smsFiltered, cloud, gmail ->
         HealthUiState(
             notification = c.notification,
             sms = sms,
             cloud = cloud,
+            gmail = gmail,
             unavailableSources = emptyList(),
             enabledApps = c.enabledApps,
             lastEventAt = listOfNotNull(c.notificationLastEvent, sms.lastEventAt).maxOrNull(),
@@ -342,7 +356,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun gmailConnected(connected: Boolean, message: String? = null) {
         viewModelScope.launch { db.configDao().set(ConfigKeys.GMAIL_CONNECTED, connected.toString()) }
         exportMessage.value = message
+        if (connected) BankMailScheduler.enqueueNow(getApplication())
     }
+
+    fun checkGmailNow() = BankMailScheduler.enqueueNow(getApplication())
 
     fun showExportMessage(message: String) {
         exportMessage.value = message

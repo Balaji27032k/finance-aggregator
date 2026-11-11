@@ -45,9 +45,27 @@ object GmailQuery {
 /** [message] is null when the sender is filtered out; [internalDateMs] is always set so progress can be checkpointed. */
 data class ParsedMail(val message: StagedMessage?, val internalDateMs: Long)
 
+data class MailText(val id: String, val fromAddress: String, val subject: String, val body: String, val internalDateMs: Long)
+
 /** Turns a Gmail API message (format=full) into plain text. */
 object GmailMessageParser {
 
+    /** Sender, subject and readable body of one message, without any sender filtering or truncation. */
+    fun extractText(json: String): MailText? {
+        val message = JSONObject(json)
+        val payload = message.optJSONObject("payload") ?: return null
+        val from = header(payload, "From")?.let(::decodeWords).orEmpty()
+        val plain = StringBuilder()
+        val html = StringBuilder()
+        collect(payload, plain, html)
+        return MailText(
+            id = message.getString("id"),
+            fromAddress = Regex("<([^>]+)>").find(from)?.groupValues?.get(1) ?: from.trim(),
+            subject = header(payload, "Subject")?.let(::decodeWords).orEmpty(),
+            body = collapse(if (plain.isNotBlank()) plain.toString() else htmlToText(html.toString())),
+            internalDateMs = message.optString("internalDate").toLongOrNull() ?: 0L,
+        )
+    }
     fun parse(json: String): ParsedMail {
         val message = JSONObject(json)
         val internalDate = message.optString("internalDate").toLongOrNull() ?: 0L

@@ -25,6 +25,10 @@ object ConfigKeys {
     const val SYNC_LAST_ATTEMPT_AT = "sync_last_attempt_at"
     const val SYNC_LAST_ERROR = "sync_last_error"
     const val GMAIL_CONNECTED = "gmail_connected"
+    const val GMAIL_BANK_AFTER = "gmail_bank_after"
+    const val GMAIL_BANK_STATUS = "gmail_bank_status"
+    const val GMAIL_BANK_LAST_CHECK = "gmail_bank_last_check"
+    const val GMAIL_BANK_CAPTURED = "gmail_bank_captured"
     val SMS_SCAN_KEYS = listOf(SMS_SCAN_STATE, SMS_SCAN_SCANNED, SMS_SCAN_CAPTURED, SMS_SCAN_ERROR)
     const val DEFAULT_SMS_SCAN_MONTHS = 12
 }
@@ -77,6 +81,7 @@ class FinanceApp : Application() {
         super.onCreate()
         container = AppContainer(this)
         com.personal.financecollector.sync.UploadScheduler.ensurePeriodic(this)
+        com.personal.financecollector.sync.BankMailScheduler.ensurePeriodic(this)
         // Only package names that are certain are seeded; other banks are chosen in Manage Sources.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             container.db.sourceDao().insertIgnore(

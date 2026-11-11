@@ -94,6 +94,9 @@ object TransactionParser {
     fun parse(event: RawFinancialEventEntity): ParsedTransaction? = when (event.sourceType) {
         SourceType.SMS -> parseSms(event.sourceApplication, event.rawPayload, event.eventTimestamp)
         SourceType.NOTIFICATION -> parseNotification(event.sourceApplication, event.rawPayload, event.eventTimestamp)
+        SourceType.GMAIL -> EmailTransactionParser.parse(
+            event.sourceSender.orEmpty(), event.rawPayload.substringBefore('\n'), event.rawPayload.substringAfter('\n', ""), event.eventTimestamp,
+        )
         else -> null
     }
 

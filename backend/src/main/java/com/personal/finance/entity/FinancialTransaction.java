@@ -124,6 +124,50 @@ public class FinancialTransaction {
         return eventTimestamp;
     }
 
+    public Direction getDirection() {
+        return direction;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
+    }
+
+    public String getCurrency() {
+        return currency;
+    }
+
+    public String getAccountLast4() {
+        return accountLast4;
+    }
+
+    public String getCounterpartyAccountLast4() {
+        return counterpartyAccountLast4;
+    }
+
+    public String getPaymentMode() {
+        return paymentMode;
+    }
+
+    public BigDecimal getBalanceAfter() {
+        return balanceAfter;
+    }
+
+    public LocalDate getTransactionDate() {
+        return transactionDate;
+    }
+
+    public String getBankCode() {
+        return bankCode;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public SourceType getSourceType() {
+        return sourceType;
+    }
+
     public void joinGroup(Long groupId, String basis) {
         this.groupId = groupId;
         this.matchBasis = basis;
