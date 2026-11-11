@@ -80,7 +80,7 @@ fun AdminScreen(
 
 @Composable
 private fun LoginForm(vm: AdminViewModel, modifier: Modifier) {
-    var user by rememberSaveable { mutableStateOf("") }
+    var user by rememberSaveable { mutableStateOf(vm.lastUser) }
     var password by remember { mutableStateOf("") }
     val busy by vm.signingIn.collectAsStateWithLifecycle()
     val error by vm.loginError.collectAsStateWithLifecycle()

@@ -6,6 +6,7 @@ import type { Txn } from './api';
 
 export function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
   const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setState((s) => ({ data: s.data, loading: true }));
@@ -16,8 +17,14 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return state;
+  }, [...deps, tick]);
+  return { ...state, reload: () => setTick((t) => t + 1) };
+}
+
+export function usePageTitle(title: string) {
+  useEffect(() => {
+    document.title = `${title} · Finance`;
+  }, [title]);
 }
 
 /** A rupee amount that counts up to its value, unless the system asks for reduced motion. */
@@ -64,8 +71,13 @@ export function Skeleton({ height = 160 }: { height?: number }) {
   return <div className="skeleton" style={{ minHeight: height }} />;
 }
 
-export function ErrorBox({ message }: { message: string }) {
-  return <div className="error">{message}</div>;
+export function ErrorBox({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="error" role="alert" style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+      <span>{message}</span>
+      {onRetry && <button className="btn" onClick={onRetry}>Try again</button>}
+    </div>
+  );
 }
 
 export function Delta({ value, goodWhenUp }: { value: number | null; goodWhenUp: boolean }) {

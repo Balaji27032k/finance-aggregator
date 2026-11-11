@@ -131,6 +131,7 @@ class MainActivity : ComponentActivity() {
                 val events by viewModel.events.collectAsStateWithLifecycle()
                 val uploadProblems by viewModel.uploadProblems.collectAsStateWithLifecycle()
                 val ledger by viewModel.ledger.collectAsStateWithLifecycle()
+                val ledgerLoaded by viewModel.ledgerLoaded.collectAsStateWithLifecycle()
                 val sources by viewModel.sources.collectAsStateWithLifecycle()
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
                 val apps by viewModel.installedApps.collectAsStateWithLifecycle()
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
                 val screenActions = actions.copy(openSources = { tab = 5 })
+                BackHandler(enabled = tab in 1..4) { tab = 0 }
                 BackHandler(enabled = tab == 5) { tab = 4 }
 
                 Scaffold(
@@ -154,12 +156,14 @@ class MainActivity : ComponentActivity() {
                     val body = Modifier.padding(padding)
                     when (tab) {
                         0 -> OverviewScreen(
-                            ledger, budget, viewModel::setBudget, onOpen,
+                            ledger, ledgerLoaded, health, budget, viewModel::setBudget, onOpen,
                             onOpenCategory = { linkedCategory = it; tab = 1 },
                             onSeeAll = { tab = 1 },
+                            onOpenHealth = { tab = 4 },
+                            onOpenActivity = { tab = 2 },
                             modifier = body,
                         )
-                        1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
+                        1 -> TransactionsScreen(ledger, onOpen, ledgerLoaded, linkedCategory, { linkedCategory = null }, body)
                         2 -> EventsScreen(events, uploadProblems, body)
                         3 -> AdminScreen(
                             vm = adminViewModel,

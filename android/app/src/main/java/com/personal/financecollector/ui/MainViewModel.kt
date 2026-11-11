@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -148,6 +149,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val parsedCache = HashMap<String, ParsedTransaction?>()
+    private val _ledgerLoaded = MutableStateFlow(false)
+    val ledgerLoaded: StateFlow<Boolean> = _ledgerLoaded
     val ledger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
         .map { all ->
             LedgerBuilder.build(all) { e ->
@@ -156,6 +159,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         .flowOn(Dispatchers.Default)
+        .onEach { _ledgerLoaded.value = true }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val systemState = tick.map { readSystemState() }

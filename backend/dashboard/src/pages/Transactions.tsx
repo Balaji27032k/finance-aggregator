@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { api, type Direction, type Txn, type TxnQuery } from '../api';
 import { cleanName, dateTimeIst, inr, longDate } from '../format';
 import { RangePicker, useRange } from '../range';
-import { Card, CategoryAvatar, ErrorBox, SourceChips, TxnDrawer, useAsync } from '../ui';
+import { Card, CategoryAvatar, ErrorBox, SourceChips, TxnDrawer, useAsync, usePageTitle } from '../ui';
 
 const PAGE = 25;
 
@@ -25,6 +25,7 @@ function toCsv(items: Txn[]): string {
 }
 
 export default function Transactions() {
+  usePageTitle('Transactions');
   const { range } = useRange();
   const [params] = useSearchParams();
   const [text, setText] = useState(params.get('q') ?? '');
@@ -127,7 +128,7 @@ export default function Transactions() {
           <button className="btn" onClick={exportCsv} disabled={exporting || !result?.total}><Download size={16} /> {exporting ? 'Preparing...' : 'CSV'}</button>
         </div>
 
-        {data.error && <ErrorBox message={data.error} />}
+        {data.error && <ErrorBox message={data.error} onRetry={data.reload} />}
         {result && (
           <div className="totals" style={{ marginBottom: 10 }}>
             <span>Out <strong className="num spend">{inr(result.totalDebit, true)}</strong></span>

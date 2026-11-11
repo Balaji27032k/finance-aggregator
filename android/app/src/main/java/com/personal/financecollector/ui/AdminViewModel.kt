@@ -23,6 +23,10 @@ data class Remote<T>(val data: T? = null, val loading: Boolean = false, val erro
 class AdminViewModel(app: Application) : AndroidViewModel(app) {
     private val db = (app as FinanceApp).container.db
     private val api = AdminApi((app as FinanceApp).container.http)
+    private val prefs = app.getSharedPreferences("finance_prefs", android.content.Context.MODE_PRIVATE)
+
+    /** Only the user name is remembered, as a convenience; the password never is. */
+    val lastUser: String = prefs.getString("admin_user", "").orEmpty()
 
     private val _signedIn = MutableStateFlow(false)
     val signedIn: StateFlow<Boolean> = _signedIn
@@ -46,7 +50,10 @@ class AdminViewModel(app: Application) : AndroidViewModel(app) {
             signingIn.value = true
             loginError.value = null
             when (val result = api.login(base, user.trim(), password)) {
-                is AdminResult.Ok -> _signedIn.value = true
+                is AdminResult.Ok -> {
+                    prefs.edit().putString("admin_user", user.trim()).apply()
+                    _signedIn.value = true
+                }
                 is AdminResult.Failed -> loginError.value = result.message
                 AdminResult.Unauthorized -> loginError.value = "Wrong user name or password"
             }

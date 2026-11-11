@@ -1,11 +1,12 @@
 import { CheckCircle2, Clock, GitMerge, Mail, MessageSquare, TriangleAlert, Bell } from 'lucide-react';
 import { api } from '../api';
 import { ago, dateTimeIst, sourceLabel } from '../format';
-import { Card, ErrorBox, Skeleton, useAsync } from '../ui';
+import { Card, ErrorBox, Skeleton, useAsync, usePageTitle } from '../ui';
 
 const ICONS: Record<string, typeof Mail> = { SMS: MessageSquare, GMAIL: Mail, NOTIFICATION: Bell };
 
 export default function DataHealth() {
+  usePageTitle('Data health');
   const health = useAsync(() => api.health(), []);
   const h = health.data;
   return (
@@ -16,7 +17,7 @@ export default function DataHealth() {
           <p>What reached the server and when</p>
         </div>
       </div>
-      {health.error && <ErrorBox message={health.error} />}
+      {health.error && <ErrorBox message={health.error} onRetry={health.reload} />}
       {!h && !health.error && <div className="grid cols-3"><Skeleton /><Skeleton /><Skeleton /></div>}
       {h && (
         <div className="grid">
