@@ -70,10 +70,22 @@ public class FinancialTransaction {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", updatable = false)
+    private SourceType sourceType;
+
+    @Column(name = "group_id")
+    private Long groupId;
+
+    @Column(name = "match_basis")
+    private String matchBasis;
+
     protected FinancialTransaction() {
     }
 
-    public FinancialTransaction(Long rawEventId, Long deviceId, TransactionItem t, Instant eventTimestamp, Instant now) {
+    public FinancialTransaction(Long rawEventId, Long deviceId, SourceType sourceType, TransactionItem t,
+                                Instant eventTimestamp, Instant now) {
+        this.sourceType = sourceType;
         this.rawEventId = rawEventId;
         this.deviceId = deviceId;
         this.direction = t.direction();
@@ -94,5 +106,30 @@ public class FinancialTransaction {
 
     public Long getId() {
         return id;
+    }
+
+    public Long getGroupId() {
+        return groupId;
+    }
+
+    public String getReferenceNo() {
+        return referenceNo;
+    }
+
+    public String getCounterparty() {
+        return counterparty;
+    }
+
+    public Instant getEventTimestamp() {
+        return eventTimestamp;
+    }
+
+    public void joinGroup(Long groupId, String basis) {
+        this.groupId = groupId;
+        this.matchBasis = basis;
+    }
+
+    public void startGroup() {
+        joinGroup(id, "NEW");
     }
 }

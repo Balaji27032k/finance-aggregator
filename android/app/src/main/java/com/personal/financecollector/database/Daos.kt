@@ -35,6 +35,9 @@ abstract class EventDao {
     )
     abstract suspend fun countNear(type: SourceType, app: String, hash: String, from: Long, to: Long): Int
 
+    @Query("SELECT * FROM raw_financial_events WHERE sourceType = 'NOTIFICATION' ORDER BY capturedTimestamp ASC")
+    abstract suspend fun notificationEvents(): List<RawFinancialEventEntity>
+
     @Query("SELECT * FROM raw_financial_events ORDER BY capturedTimestamp DESC LIMIT :limit")
     abstract fun observeRecent(limit: Int): Flow<List<RawFinancialEventEntity>>
 

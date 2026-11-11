@@ -27,6 +27,7 @@ data class ExportUi(
     val paired: Boolean,
     val sms: ExportProgressUi,
     val mail: ExportProgressUi,
+    val notif: ExportProgressUi,
     val gmailConnected: Boolean,
     val message: String?,
 )
@@ -47,7 +48,7 @@ private fun describe(p: ExportProgressUi, totalLabel: Boolean): String {
 fun ExportCard(export: ExportUi, actions: HealthActions) {
     Card {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Analysis export (temporary)", style = MaterialTheme.typography.titleMedium)
+            Text("Analysis export (hidden tool)", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Copies full message text into a separate table so message formats can be studied. " +
                     "Personal-number SMS senders are skipped and OTP digits are masked.",
@@ -72,6 +73,9 @@ fun ExportCard(export: ExportUi, actions: HealthActions) {
                 }
             }
             export.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text("Captured notifications", style = MaterialTheme.typography.titleSmall)
+            Text(describe(export.notif, false), style = MaterialTheme.typography.bodySmall)
+            Button(onClick = actions.fetchNotifications, enabled = export.notif.state != ExportState.RUNNING) { Text("Send captured notifications") }
         }
     }
 }

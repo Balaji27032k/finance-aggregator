@@ -1,6 +1,7 @@
 package com.personal.financecollector.collector
 
 import com.personal.financecollector.ConfigKeys
+import com.personal.financecollector.DefaultSmsSenders
 import com.personal.financecollector.StatusKeys
 import com.personal.financecollector.database.FinanceDatabase
 import com.personal.financecollector.database.RawFinancialEventEntity
@@ -14,7 +15,7 @@ class SmsIngestor(private val db: FinanceDatabase, private val onCaptured: () ->
 
     suspend fun loadRules(): SmsRules = SmsRules(
         paused = db.configDao().get(ConfigKeys.COLLECTION_PAUSED) == "true",
-        allowedSenders = db.sourceDao().enabledIdentifiers(SourceType.SMS).toSet(),
+        allowedSenders = db.sourceDao().enabledIdentifiers(SourceType.SMS).toSet() + DefaultSmsSenders.all.map { it.first },
     )
 
     suspend fun ingest(sender: String?, body: String, timestampMs: Long): SmsIngestResult =

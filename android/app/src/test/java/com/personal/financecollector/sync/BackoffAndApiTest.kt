@@ -55,7 +55,7 @@ class BackoffAndApiTest {
         assertEquals("hash-evt-1", item.getString("payloadHash"))
         assertEquals(false, item.has("payload"))
         assertEquals("PARSED", item.getString("parserStatus"))
-        assertEquals("sms-2", item.getString("parserVersion"))
+        assertEquals("parser-3", item.getString("parserVersion"))
         val t = item.getJSONObject("transaction")
         assertEquals("DEBIT", t.getString("direction"))
         assertEquals("10.00", t.getString("amount"))

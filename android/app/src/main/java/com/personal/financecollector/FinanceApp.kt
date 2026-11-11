@@ -49,6 +49,7 @@ object DefaultSmsSenders {
         "ATMSBI" to "SBI (ATM and card)",
         "CBSSBI" to "SBI (core banking)",
         "SBYONO" to "SBI YONO",
+        "SBIINB" to "SBI Internet Banking",
     )
 }
 

@@ -22,6 +22,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.personal.financecollector.database.ConnectedSourceEntity
 import com.personal.financecollector.database.RawFinancialEventEntity
@@ -31,7 +33,7 @@ fun EventsScreen(events: List<RawFinancialEventEntity>, modifier: Modifier = Mod
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Text("Captured events (${events.size})", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(vertical = 8.dp))
         if (events.isEmpty()) {
-            Text("Nothing captured yet. Enable notification access or SMS, or send a test notification from the Health tab.")
+            Text("Nothing captured yet. New bank messages and payment notifications appear here automatically.")
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(events, key = { it.localEventId }) { EventRow(it) }
@@ -42,23 +44,27 @@ fun EventsScreen(events: List<RawFinancialEventEntity>, modifier: Modifier = Mod
 @Composable
 private fun EventRow(event: RawFinancialEventEntity) {
     var expanded by remember(event.localEventId) { mutableStateOf(false) }
+    val card = remember(event.localEventId, event.uploadStatus) { EventPresenter.present(event) }
     Card(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${event.sourceType.name} · ${event.sourceApplication}", style = MaterialTheme.typography.labelMedium)
-                Text(event.uploadStatus.name, style = MaterialTheme.typography.labelMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(card.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                card.amount?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (card.credit == true) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    )
+                }
             }
-            Text(
-                event.rawPayload,
-                maxLines = if (expanded) Int.MAX_VALUE else 2,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text("Captured ${formatTime(event.capturedTimestamp)}", style = MaterialTheme.typography.bodySmall)
+            Text(card.details, style = MaterialTheme.typography.bodySmall)
+            card.extra?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            card.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text(card.status, style = MaterialTheme.typography.labelMedium)
             if (expanded) {
-                Text("Parser: ${event.parserStatus.name} (${event.parserVersion})", style = MaterialTheme.typography.bodySmall)
-                Text("Event time ${formatTime(event.eventTimestamp)}", style = MaterialTheme.typography.bodySmall)
-                event.sourceSender?.let { Text("Sender: $it", style = MaterialTheme.typography.bodySmall) }
-                Text("Retries: ${event.retryCount}  Last error: ${event.lastError ?: "none"}", style = MaterialTheme.typography.bodySmall)
+                Text("Captured ${formatTime(event.capturedTimestamp)}", style = MaterialTheme.typography.bodySmall)
+                Text("Parser: ${event.parserVersion}  Retries: ${event.retryCount}  Last error: ${event.lastError ?: "none"}", style = MaterialTheme.typography.bodySmall)
             }
         }
     }

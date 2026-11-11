@@ -88,6 +88,30 @@ class SmsExportWorker(context: Context, params: WorkerParameters) : CoroutineWor
     }
 }
 
+class NotificationExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val container = (applicationContext as FinanceApp).container
+        val progress = ExportProgress(container.db.configDao(), "notif")
+        val sink = pairedSink(applicationContext, progress) ?: return Result.success()
+        return try {
+            val rows = suspend {
+                container.db.eventDao().notificationEvents()
+                    .map { NotificationRow(it.sourceEventId, com.personal.financecollector.collector.NotificationApps.shortName(it.sourceApplication), it.rawPayload, it.capturedTimestamp) }
+            }
+            when (NotificationExporter(rows, progress, sink).run()) {
+                is ExportResult.Retry -> Result.retry()
+                else -> Result.success()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            progress.put(ExportProgress.STATE, ExportState.FAILED)
+            progress.put(ExportProgress.ERROR, e.javaClass.simpleName)
+            Result.success()
+        }
+    }
+}
+
 class GmailExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val container = (applicationContext as FinanceApp).container
@@ -111,6 +135,8 @@ class GmailExportWorker(context: Context, params: WorkerParameters) : CoroutineW
 
 object ExportScheduler {
     private val needsNetwork = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+
+    fun enqueueNotifications(context: Context) = enqueue<NotificationExportWorker>(context, "export_notif")
 
     fun enqueueSms(context: Context) = enqueue<SmsExportWorker>(context, "export_sms")
 

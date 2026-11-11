@@ -17,6 +17,7 @@ public record StagedMessageItem(
 
     public enum Channel {
         SMS,
-        EMAIL
+        EMAIL,
+        NOTIF
     }
 }

@@ -31,7 +31,7 @@ data class ParsedTransaction(
  * OTPs, declines, upcoming-mandate notices, payment requests, balance replies and offers never become transactions.
  */
 object TransactionParser {
-    const val VERSION = "sms-2"
+    const val VERSION = "parser-3"
 
     /** Sender entities whose SMS describe movements on the user's own accounts or cards. */
     val BANK_SENDERS = setOf("INDBNK", "CSBBNK", "SBIUPI", "SBIPSG", "SBIBNK", "SBYONO", "ATMSBI", "CBSSBI", "SBIINB", "ICICIT")
@@ -66,6 +66,7 @@ object TransactionParser {
     private val linked = Regex("""linked to (?:mobile(?: number)?|VPA)\s+([A-Za-z0-9X@._\-]+)""", I)
     private val vpa = Regex("""([A-Za-z0-9._\-]+@[A-Za-z0-9]+)""")
     private val upiStructured = Regex("""UPI/(?:DR|CR)/(\d{6,})/([^/]*)/([A-Za-z0-9]{3,4})/([^/]*)/(.*?)(?=\s+on\s+\d|\s*$)""", I)
+    private val impsStructured = Regex("""IMPS-+(\d{9,})-([^-]+)-[A-Za-z]{4}0[A-Za-z0-9]{6}-[*Xx]*(\d{3,})""", I)
     private val reference = Regex(
         """(?:UPI/(?:DR|CR|REVERSAL)/|UPI\s*Ref\.?\s*no\.?|IMPS\s*Ref\.?\s*no\.?|UPI|IMPS|RRN|Ref\s*no\.?|Ref|""" +
             """UTR(?:\s*No\.?)?|Transaction\s*(?:Number|No\.?))\s*[:\-]?\s*((?=[A-Za-z0-9]*\d)[A-Za-z0-9]{6,})""",
@@ -81,7 +82,7 @@ object TransactionParser {
     private val footer = Regex("""\s*-\s*(?:SBI|Indian Bank|CSB Bank|CSB)\s*$""", I)
 
     private val notAMovement = listOf(
-        Regex("""\bOTP\s+(?:is|for|to|code)\b|\bis\s+(?:your\s+|the\s+)?OTP\b|\bOTP[:\-]""", I),
+        Regex("""\bOTP\s+(?:is|for|to|code)\b|\bis\s+(?:your\s+|the\s+)?OTP\b|\bOTP[:\-]|\bone[- ]time\s+password\b""", I),
         Regex("""\b(?:declined|failed|unsuccessful|unable to|not completed)\b""", I),
         Regex("""\bwill be\s+(?:auto\s+)?debited\b""", I),
         Regex("""\bupcoming mandate\b""", I),
@@ -90,15 +91,23 @@ object TransactionParser {
         Regex("""\bLast transaction in\b""", I),
     )
 
-    fun parse(event: RawFinancialEventEntity): ParsedTransaction? =
-        if (event.sourceType == SourceType.SMS) {
-            parseSms(event.sourceApplication, event.rawPayload, event.eventTimestamp)
-        } else {
-            null
-        }
+    fun parse(event: RawFinancialEventEntity): ParsedTransaction? = when (event.sourceType) {
+        SourceType.SMS -> parseSms(event.sourceApplication, event.rawPayload, event.eventTimestamp)
+        SourceType.NOTIFICATION -> parseNotification(event.sourceApplication, event.rawPayload, event.eventTimestamp)
+        else -> null
+    }
 
-    fun parseSms(bankCode: String, body: String, eventTimestampMs: Long): ParsedTransaction? {
-        if (bankCode.uppercase() !in BANK_SENDERS) return null
+    fun parseSms(bankCode: String, body: String, eventTimestampMs: Long): ParsedTransaction? =
+        if (bankCode.uppercase() in BANK_SENDERS) parseBankText(bankCode, body, eventTimestampMs) else null
+
+    /** Bank-app alerts mirror the bank SMS; payment apps (Google Pay, PhonePe, Paytm) use their own short wording. */
+    fun parseNotification(packageName: String, text: String, eventTimestampMs: Long): ParsedTransaction? {
+        val app = NotificationApps.shortName(packageName)
+        return parseBankText(app, text, eventTimestampMs) ?: parsePaymentApp(app, text, eventTimestampMs)
+    }
+
+    /** The bank-alert engine shared by SMS, bank-app notifications and bank e-mails. */
+    fun parseBankText(bankCode: String, body: String, eventTimestampMs: Long): ParsedTransaction? {
         val text = body.replace(Regex("""\s+"""), " ").trim()
         if (notAMovement.any { it.containsMatchIn(text) }) return null
 
@@ -119,12 +128,14 @@ object TransactionParser {
         val accounts = account.findAll(text).map { it.groupValues[1].takeLast(4) }.toList()
         val cardLast4 = card.find(text)?.groupValues?.get(1)
         val structured = upiStructured.find(text)
-        val referenceNo = structured?.groupValues?.get(1) ?: reference.find(text)?.groupValues?.get(1)
+        val imps = impsStructured.find(text)
+        val referenceNo = structured?.groupValues?.get(1) ?: imps?.groupValues?.get(1) ?: reference.find(text)?.groupValues?.get(1)
 
         // A real alert always carries an account or card, a reference or a balance; offers and notices do not.
         if (accounts.isEmpty() && cardLast4 == null && referenceNo == null && balanceMatch == null) return null
 
         val name = structured?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: imps?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
             ?: linked.find(text)?.groupValues?.get(1)?.trimEnd('.', '-')
             ?: (if (isDebit) payee else payer).find(text)?.groupValues?.get(1)?.trim()?.take(200)?.ifBlank { null }
             ?: vpa.find(text)?.value
@@ -132,7 +143,7 @@ object TransactionParser {
         val note = info.find(text)?.groupValues?.get(1)?.replace(footer, "")?.trim()
             ?: remark
             ?: special(text)
-            ?: (if (structured == null) towards.find(text)?.groupValues?.get(1)?.trim() else null)
+            ?: (if (structured == null && imps == null) towards.find(text)?.groupValues?.get(1)?.trim() else null)
 
         return ParsedTransaction(
             direction = if (isDebit) "DEBIT" else "CREDIT",
@@ -140,13 +151,55 @@ object TransactionParser {
             currency = "INR",
             accountLast4 = accounts.firstOrNull() ?: cardLast4,
             counterparty = name,
-            counterpartyAccountLast4 = accounts.drop(1).firstOrNull { it != accounts.first() },
+            counterpartyAccountLast4 = accounts.drop(1).firstOrNull { it != accounts.first() }
+                ?: imps?.groupValues?.get(3)?.takeLast(4),
             paymentMode = mode(text),
             referenceNo = referenceNo,
             balanceAfter = balanceMatch?.groupValues?.get(1)?.let { money(it) },
             transactionDate = textDate(text) ?: Instant.ofEpochMilli(eventTimestampMs).atZone(ZoneId.systemDefault()).toLocalDate(),
             bankCode = bankCode,
             note = note?.take(255)?.ifBlank { null },
+        )
+    }
+
+    private const val APP_STOP = """(?=[.,!]|\s+(?:via|using|on|from|UPI|Ref|successful(?:ly)?)\b|\s*$)"""
+    private val payCur = """$CUR\s*($NUM)"""
+    private val paidYou = Regex("""^(.{2,60}?)\s+(?:paid|sent)\s+you\s+$payCur""", I)
+    private val receivedFrom = Regex("""\b(?:received|credited)\s+$payCur(?:\s+from\s+(.+?)$APP_STOP)?""", I)
+    private val amountReceived = Regex("""$payCur\s+(?:received|credited)(?:\s+from\s+(.+?)$APP_STOP)?""", I)
+    private val youPaid = Regex("""\b(?:you\s+)?(?:paid|sent|payment\s+of)\s+$payCur(?:\s+(?:to|at)\s+(.+?)$APP_STOP)?""", I)
+    private val amountPaid = Regex("""$payCur\s+(?:paid|sent|debited|spent)(?:\s+(?:to|at)\s+(.+?)$APP_STOP)?""", I)
+    private val appNoise = Regex("""\b(?:cashback|reward|offer|scratch|won|win|coupon|reminder|due|expires?|request(?:ed)?|collect|pending)\b""", I)
+
+    /** Short app wording such as "Name paid you Rs 500" or "You paid Rs 30 to Shop"; needs a counterparty or reference. */
+    private fun parsePaymentApp(app: String, body: String, eventTimestampMs: Long): ParsedTransaction? {
+        val text = body.replace(Regex("""\s+"""), " ").trim()
+        if (notAMovement.any { it.containsMatchIn(text) } || appNoise.containsMatchIn(text)) return null
+
+        val hit: Triple<String, String, String?> = paidYou.find(text)?.let { Triple("CREDIT", it.groupValues[2], it.groupValues[1]) }
+            ?: receivedFrom.find(text)?.let { Triple("CREDIT", it.groupValues[1], it.groupValues[2].ifBlank { null }) }
+            ?: amountReceived.find(text)?.let { Triple("CREDIT", it.groupValues[1], it.groupValues[2].ifBlank { null }) }
+            ?: youPaid.find(text)?.let { Triple("DEBIT", it.groupValues[1], it.groupValues[2].ifBlank { null }) }
+            ?: amountPaid.find(text)?.let { Triple("DEBIT", it.groupValues[1], it.groupValues[2].ifBlank { null }) }
+            ?: return null
+        val amount = money(hit.second)?.takeIf { it.signum() > 0 } ?: return null
+        val name = hit.third?.trim()?.take(200)?.ifBlank { null }
+        val referenceNo = reference.find(text)?.groupValues?.get(1)
+        if (name == null && referenceNo == null) return null
+
+        return ParsedTransaction(
+            direction = hit.first,
+            amount = amount,
+            currency = "INR",
+            accountLast4 = account.find(text)?.groupValues?.get(1)?.takeLast(4),
+            counterparty = name,
+            counterpartyAccountLast4 = null,
+            paymentMode = if (app in setOf("GPAY", "PHONEPE", "PAYTM", "BHIM") || Regex("""\bUPI\b""", I).containsMatchIn(text)) "UPI" else mode(text),
+            referenceNo = referenceNo,
+            balanceAfter = null,
+            transactionDate = textDate(text) ?: Instant.ofEpochMilli(eventTimestampMs).atZone(ZoneId.systemDefault()).toLocalDate(),
+            bankCode = app,
+            note = null,
         )
     }
 

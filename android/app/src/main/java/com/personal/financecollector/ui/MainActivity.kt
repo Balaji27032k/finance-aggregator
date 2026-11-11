@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
             fetchAllSms = viewModel::fetchAllSms,
             connectGmail = ::connectGmail,
             fetchGmail = viewModel::fetchGmail,
+            fetchNotifications = viewModel::fetchNotifications,
         )
         setContent {
             MaterialTheme {
@@ -129,7 +130,6 @@ class MainActivity : ComponentActivity() {
                         NavigationBar {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Health") })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Events") })
-                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Settings, null) }, label = { Text("Sources") })
                         }
                     },
                 ) { padding ->

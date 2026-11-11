@@ -2,6 +2,7 @@ package com.personal.financecollector.ui
 
 import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +56,7 @@ data class HealthActions(
     val fetchAllSms: () -> Unit,
     val connectGmail: () -> Unit,
     val fetchGmail: () -> Unit,
+    val fetchNotifications: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -80,12 +83,27 @@ fun HealthScreen(
         return
     }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Seven taps on the title reveal the analysis-export tools, which are only needed when a new bank is added.
+    var titleTaps by remember { mutableStateOf(0) }
+    var showExportTools by rememberSaveable { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item { Text("Collection health", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp)) }
+        item {
+            Text(
+                "Collection health",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(top = 8.dp).clickable {
+                    titleTaps++
+                    if (titleTaps >= 7) {
+                        showExportTools = !showExportTools
+                        titleTaps = 0
+                    }
+                },
+            )
+        }
 
         if (state.warnings.isNotEmpty()) {
             item {
@@ -122,7 +140,7 @@ fun HealthScreen(
 
         item { CloudCard(state.cloud, pairingMessage, actions) }
 
-        item { ExportCard(export, actions) }
+        if (showExportTools) item { ExportCard(export, actions) }
 
         items(state.unavailableSources) { SourceCard(it) {} }
 

@@ -36,16 +36,18 @@ public class EventIngestionService {
     private final RawFinancialEventRepository events;
     private final OutboxEventRepository outbox;
     private final FinancialTransactionRepository ledger;
+    private final TransactionMatcher matcher;
     private final TransactionTemplate transactions;
     private final Validator validator;
     private final Clock clock;
 
     public EventIngestionService(RawFinancialEventRepository events, OutboxEventRepository outbox,
-                                 FinancialTransactionRepository ledger, TransactionTemplate transactions,
-                                 Validator validator, Clock clock) {
+                                 FinancialTransactionRepository ledger, TransactionMatcher matcher,
+                                 TransactionTemplate transactions, Validator validator, Clock clock) {
         this.events = events;
         this.outbox = outbox;
         this.ledger = ledger;
+        this.matcher = matcher;
         this.transactions = transactions;
         this.validator = validator;
         this.clock = clock;
@@ -97,7 +99,15 @@ public class EventIngestionService {
                 deviceId, item.localEventId(), item.sourceType(), item.sourceApplication(), item.sourceSender(),
                 item.sourceEventId(), item.eventTimestamp(), item.capturedTimestamp(), item.payloadHash(),
                 item.parserStatus(), item.parserVersion(), now));
-        ledger.save(new FinancialTransaction(saved.getId(), deviceId, item.transaction(), item.eventTimestamp(), now));
+        FinancialTransaction row = new FinancialTransaction(saved.getId(), deviceId, item.sourceType(), item.transaction(),
+                item.eventTimestamp(), now);
+        var match = matcher.find(item.transaction().direction(), item.transaction().amount(),
+                item.transaction().referenceNo(), item.sourceType(), item.eventTimestamp(), item.transaction().counterparty());
+        match.ifPresent(m -> row.joinGroup(m.groupId(), m.basis()));
+        FinancialTransaction stored = ledger.saveAndFlush(row);
+        if (match.isEmpty()) {
+            stored.startGroup();
+        }
         outbox.save(OutboxEvent.rawEventReceived(saved.getId(), now));
         return IngestResult.accepted(item.localEventId(), saved.getId());
     }

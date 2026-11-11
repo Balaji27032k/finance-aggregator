@@ -141,7 +141,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val warnings = buildList {
             if (!system.listenerGranted) add("Notification access is off. Notifications cannot be captured until you enable it.")
             if (system.batteryRestricted) add("Battery optimization is on for this app. The system may stop collection in the background.")
-            if (system.listenerGranted && enabled.isEmpty()) add("No notification apps are enabled. Choose apps in Sources.")
         }
         Core(
             notification = CollectionHealth.notificationListener(system.listenerGranted, isPaused, connected, enabled.size),
@@ -304,17 +303,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val exportMessage = MutableStateFlow<String?>(null)
 
+    private val exportProgresses = combine(exportProgress("sms"), exportProgress("mail"), exportProgress("notif")) { sms, mail, notif ->
+        Triple(sms, mail, notif)
+    }
+
     val export: StateFlow<ExportUi> = combine(
         db.configDao().observe(ConfigKeys.PAIRED),
-        exportProgress("sms"),
-        exportProgress("mail"),
+        exportProgresses,
         db.configDao().observe(ConfigKeys.GMAIL_CONNECTED),
         exportMessage,
-    ) { paired, sms, mail, gmail, message -> ExportUi(paired == "true", sms, mail, gmail == "true", message) }
-        .stateIn(
-            viewModelScope, SharingStarted.WhileSubscribed(5000),
-            ExportUi(false, ExportProgressUi(null, 0, 0, 0, 0, null), ExportProgressUi(null, 0, 0, 0, 0, null), false, null),
-        )
+    ) { paired, progresses, gmail, message ->
+        ExportUi(paired == "true", progresses.first, progresses.second, progresses.third, gmail == "true", message)
+    }.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000),
+        ExportUi(false, ExportProgressUi(null, 0, 0, 0, 0, null), ExportProgressUi(null, 0, 0, 0, 0, null), ExportProgressUi(null, 0, 0, 0, 0, null), false, null),
+    )
+
+    fun fetchNotifications() {
+        exportMessage.value = null
+        ExportScheduler.enqueueNotifications(getApplication())
+    }
 
     fun fetchAllSms() {
         exportMessage.value = null

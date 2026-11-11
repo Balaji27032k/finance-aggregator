@@ -191,6 +191,43 @@ class SmsExporter(
 
 data class MailPage(val ids: List<String>, val nextPageToken: String?, val estimate: Int)
 
+data class NotificationRow(val id: String, val app: String, val text: String, val capturedAt: Long)
+
+/** Sends every captured notification as text, in small batches; the backend ignores repeats. */
+class NotificationExporter(
+    private val rows: suspend () -> List<NotificationRow>,
+    private val progress: ExportProgress,
+    private val sink: StagingSink,
+    private val batchSize: Int = 25,
+) {
+    suspend fun run(): ExportResult {
+        progress.put(ExportProgress.STATE, ExportState.RUNNING)
+        progress.put(ExportProgress.ERROR, "")
+        val all = rows()
+        progress.put(ExportProgress.TOTAL, all.size)
+        var result: ExportResult = ExportResult.Complete
+        var seen = 0L
+        for (chunk in all.chunked(batchSize)) {
+            val messages = chunk.map {
+                StagedMessage("NOTIF", it.id, it.app, null, it.capturedAt, ExportMasking.maskOtp(it.text), false, null)
+            }
+            progress.deliver(sink, messages)?.let { result = it }
+            if (result != ExportResult.Complete) break
+            seen += chunk.size
+            progress.put(ExportProgress.SEEN, seen)
+        }
+        when (val r = result) {
+            ExportResult.Complete -> progress.put(ExportProgress.STATE, ExportState.COMPLETE)
+            is ExportResult.Retry -> progress.put(ExportProgress.ERROR, r.reason)
+            is ExportResult.Failed -> {
+                progress.put(ExportProgress.STATE, ExportState.FAILED)
+                progress.put(ExportProgress.ERROR, r.reason)
+            }
+        }
+        return result
+    }
+}
+
 interface MailSource {
     suspend fun list(query: String, pageToken: String?): MailPage
 
