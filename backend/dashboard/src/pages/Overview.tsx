@@ -7,7 +7,7 @@ import { categoryStyle } from '../categories';
 import { ago, cleanName, inr, inrShort, longDate, parseIso, pctChange, shortDate, toIso } from '../format';
 import { PaceCard } from '../PaceCard';
 import { RangePicker, useRange } from '../range';
-import { Card, ChartTip, Delta, ErrorBox, Money, Skeleton, TxnDrawer, TxnRow, useAsync, usePageTitle } from '../ui';
+import { Card, ChartTip, Delta, ErrorBox, Money, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -29,7 +29,6 @@ function weekly(daily: DayPoint[]): DayPoint[] {
 }
 
 export default function Overview() {
-  usePageTitle('Overview');
   const { range } = useRange();
   const [open, setOpen] = useState<Txn | null>(null);
   const summary = useAsync(() => api.summary(range.from, range.to), [range.from, range.to]);
@@ -49,7 +48,7 @@ export default function Overview() {
         <RangePicker />
       </div>
 
-      {summary.error && <ErrorBox message={summary.error} onRetry={summary.reload} />}
+      {summary.error && <ErrorBox message={summary.error} />}
       {!s && !summary.error && <div className="grid cols-4"><Skeleton /><Skeleton /><Skeleton /><Skeleton /></div>}
 
       {s && s.totals.count === 0 && s.balances.length === 0 && (

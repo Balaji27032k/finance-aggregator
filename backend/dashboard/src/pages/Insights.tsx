@@ -6,7 +6,7 @@ import { categoryStyle } from '../categories';
 import { cleanName, inr, inrShort, longDate, monthLabel, pctChange, shortDate } from '../format';
 import { RangePicker, useRange } from '../range';
 import { Heatmap } from '../Heatmap';
-import { Card, ChartTip, ErrorBox, Skeleton, TxnDrawer, TxnRow, useAsync, usePageTitle } from '../ui';
+import { Card, ChartTip, ErrorBox, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
 
 const FULL_DAY: Record<string, string> = {
   Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday',
@@ -67,7 +67,6 @@ function BucketBars({ items, color, empty = 'Nothing yet' }: { items: Bucket[]; 
 }
 
 export default function Insights() {
-  usePageTitle('Insights');
   const { range } = useRange();
   const [open, setOpen] = useState<Txn | null>(null);
   const summary = useAsync(() => api.summary(range.from, range.to), [range.from, range.to]);
@@ -82,7 +81,7 @@ export default function Insights() {
         </div>
         <RangePicker />
       </div>
-      {summary.error && <ErrorBox message={summary.error} onRetry={summary.reload} />}
+      {summary.error && <ErrorBox message={summary.error} />}
       {!s && !summary.error && <div className="grid cols-2"><Skeleton height={240} /><Skeleton height={240} /></div>}
       {s && (
         <div className="grid" style={{ opacity: summary.loading ? 0.6 : 1 }}>

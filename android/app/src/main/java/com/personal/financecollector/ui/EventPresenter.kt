@@ -22,13 +22,20 @@ data class EventCardData(
     val understood: Boolean,
     val statusKind: StatusKind = StatusKind.DONE,
     val problem: String? = null,
+    val received: String = "",
 )
 
 /** Turns a captured event into the facts shown on the Events tab; the raw message text is never displayed. */
 object EventPresenter {
     private val dateFormat = DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH)
+    private val receivedFormat = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH)
 
-    fun present(event: RawFinancialEventEntity): EventCardData {
+    /** The cards are sorted by this time, so it is shown on every card. */
+    fun present(event: RawFinancialEventEntity): EventCardData = build(event).copy(
+        received = java.time.Instant.ofEpochMilli(event.eventTimestamp).atZone(LedgerBuilder.IST).format(receivedFormat),
+    )
+
+    private fun build(event: RawFinancialEventEntity): EventCardData {
         val t = TransactionParser.parse(event)
         val source = sourceLabel(event)
         if (t == null) {

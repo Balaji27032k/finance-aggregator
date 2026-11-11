@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -94,7 +93,6 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
 fun TransactionsScreen(
     ledger: List<LedgerTxn>,
     onOpen: (LedgerTxn) -> Unit,
-    loaded: Boolean = true,
     presetCategory: String? = null,
     onPresetUsed: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -153,9 +151,7 @@ fun TransactionsScreen(
         }
         if (shown.isEmpty()) {
             item {
-                if (!loaded) {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 24.dp))
-                } else Text(
+                Text(
                     if (ledger.isEmpty()) "Nothing yet. Bank SMS and e-mails appear here once they are read." else "Nothing matches these filters.",
                     modifier = Modifier.padding(vertical = 24.dp),
                 )

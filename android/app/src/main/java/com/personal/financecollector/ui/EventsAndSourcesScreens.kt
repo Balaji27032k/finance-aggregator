@@ -110,6 +110,7 @@ private fun EventRow(event: RawFinancialEventEntity) {
             }
         }
         Text(card.details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Received ${card.received}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         card.extra?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         card.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         StatusPill(card.status, statusColor(card.statusKind))

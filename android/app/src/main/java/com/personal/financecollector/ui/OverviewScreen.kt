@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Card
@@ -41,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,15 +50,11 @@ import java.time.LocalDate
 @Composable
 fun OverviewScreen(
     ledger: List<LedgerTxn>,
-    loaded: Boolean,
-    health: HealthUiState?,
     budget: Long?,
     onSetBudget: (Long?) -> Unit,
     onOpen: (LedgerTxn) -> Unit,
     onOpenCategory: (String) -> Unit,
     onSeeAll: () -> Unit,
-    onOpenHealth: () -> Unit,
-    onOpenActivity: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
@@ -86,16 +80,6 @@ fun OverviewScreen(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(Period.entries) { p -> FilterChip(period == p, { period = p }, { Text(p.label) }) }
             }
-        }
-        health?.let { h ->
-            item { SyncStatus(h, onOpenHealth, onOpenActivity) }
-            if (!(h.sms.permissionGranted && h.cloud.paired && h.gmail.connected)) {
-                item { SetupCard(h, onOpenHealth) }
-            }
-        }
-        if (!loaded) {
-            item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp)) }
-            return@LazyColumn
         }
         if (ledger.isEmpty()) {
             item {
@@ -155,42 +139,6 @@ fun OverviewScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-/** One line that says whether the numbers below are complete, and where to look if they are not. */
-@Composable
-private fun SyncStatus(h: HealthUiState, onOpenHealth: () -> Unit, onOpenActivity: () -> Unit) {
-    val (text, color, action) = when {
-        h.paused -> Triple("Collection is paused", Color(0xFFEF6C00), onOpenHealth)
-        !h.cloud.paired -> Triple("Not backed up to your server yet", Color(0xFF757575), onOpenHealth)
-        h.failed > 0 -> Triple("${h.failed} upload${if (h.failed == 1) "" else "s"} failed", Color(0xFFC62828), onOpenActivity)
-        h.pending > 0 -> Triple("${h.pending} waiting to upload", Color(0xFF1565C0), onOpenActivity)
-        else -> Triple("Up to date, last upload ${formatTime(h.lastUploadAt)}", Color(0xFF2E7D32), onOpenHealth)
-    }
-    Row(Modifier.clickable(onClick = action), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        StatusPill(text, color)
-        Text("Details", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SetupCard(h: HealthUiState, onOpenHealth: () -> Unit) {
-    val steps = listOf(
-        "Read your bank SMS" to h.sms.permissionGranted,
-        "Pair with your server" to h.cloud.paired,
-        "Connect Gmail for payee names" to h.gmail.connected,
-        "Read payment notifications (optional)" to (h.notification.state != com.personal.financecollector.service.SourceState.PERMISSION_REQUIRED),
-    )
-    Panel(container = MaterialTheme.colorScheme.tertiaryContainer) {
-        Text("Finish setting up (${steps.count { it.second }} of ${steps.size} done)", style = MaterialTheme.typography.titleMedium)
-        steps.forEach { (label, done) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatusPill(if (done) "Done" else "To do", if (done) Color(0xFF2E7D32) else Color(0xFFEF6C00))
-                Text(label)
-            }
-        }
-        Button(onClick = onOpenHealth, modifier = Modifier.fillMaxWidth()) { Text("Open Health to finish") }
     }
 }
 

@@ -33,8 +33,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,7 +72,6 @@ fun InOutChart(daily: List<DayAmount>, modifier: Modifier = Modifier) {
         )
         Canvas(
             Modifier.fillMaxWidth().height(170.dp)
-                .semantics { contentDescription = "Chart of money in and out. Touch to read a day." }
                 .pointerInput(points) { detectTapGestures { selected = indexAt(it.x, size.width, points.size) } }
                 .pointerInput(points) { detectHorizontalDragGestures { change, _ -> selected = indexAt(change.position.x, size.width, points.size) } },
         ) {
@@ -149,7 +146,6 @@ fun GroupedBars(
         )
         Canvas(
             Modifier.fillMaxWidth().height(height.dp)
-                .semantics { contentDescription = "Bar chart: ${labels.joinToString(", ")}. Touch a bar to read it." }
                 .pointerInput(labels) { detectTapGestures { selected = indexAt(it.x, size.width, labels.size) } }
                 .pointerInput(labels) { detectHorizontalDragGestures { change, _ -> selected = indexAt(change.position.x, size.width, labels.size) } },
         ) {
@@ -205,8 +201,7 @@ fun SpendCalendar(daily: List<DayAmount>, modifier: Modifier = Modifier) {
             val density = androidx.compose.ui.platform.LocalDensity.current
             val cellPx = with(density) { cell.toPx() }
             Canvas(
-                Modifier.height(cell * 7).fillMaxWidth()
-                    .semantics { contentDescription = "Spending calendar, one square per day. Touch a square to read it." }.pointerInput(cells, cellPx) {
+                Modifier.height(cell * 7).fillMaxWidth().pointerInput(cells, cellPx) {
                     detectTapGestures { o ->
                         val col = (o.x / cellPx).toInt()
                         val row = (o.y / cellPx).toInt()

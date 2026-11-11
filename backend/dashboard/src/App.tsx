@@ -24,22 +24,6 @@ function useTheme(): [Theme, () => void] {
   return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))];
 }
 
-function Splash() {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setSlow(true), 4000);
-    return () => clearTimeout(id);
-  }, []);
-  return (
-    <div className="login">
-      <div className="muted" style={{ textAlign: 'center' }}>
-        Loading...
-        {slow && <div style={{ marginTop: 8 }}>Waking the server up. This can take up to a minute.</div>}
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const [theme, toggleTheme] = useTheme();
   const [user, setUser] = useState<string | null | undefined>(undefined);
@@ -57,7 +41,7 @@ export default function App() {
     }
   }, []);
 
-  if (user === undefined) return <Splash />;
+  if (user === undefined) return <div className="login"><div className="muted">Loading...</div></div>;
   if (user === null) return <Login onSignedIn={setUser} />;
 
   return (

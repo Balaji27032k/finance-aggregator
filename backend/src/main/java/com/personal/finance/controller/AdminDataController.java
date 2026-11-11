@@ -8,7 +8,7 @@ import com.personal.finance.dto.TransactionView;
 import com.personal.finance.entity.Direction;
 import com.personal.finance.repository.FinancialTransactionRepository;
 import com.personal.finance.service.AnalyticsService;
-import com.personal.finance.service.RecentTransactions;
+import com.personal.finance.service.TransactionQueryService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -36,11 +36,11 @@ public class AdminDataController {
     private static final int MAX_RANGE_DAYS = 800;
 
     private final AnalyticsService analytics;
-    private final RecentTransactions transactions;
+    private final TransactionQueryService transactions;
     private final FinancialTransactionRepository ledger;
     private final Clock clock;
 
-    public AdminDataController(AnalyticsService analytics, RecentTransactions transactions,
+    public AdminDataController(AnalyticsService analytics, TransactionQueryService transactions,
                                FinancialTransactionRepository ledger, Clock clock) {
         this.analytics = analytics;
         this.transactions = transactions;

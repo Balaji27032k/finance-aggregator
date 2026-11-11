@@ -38,14 +38,15 @@ abstract class EventDao {
     @Query("SELECT * FROM raw_financial_events WHERE sourceType = 'NOTIFICATION' ORDER BY capturedTimestamp ASC")
     abstract suspend fun notificationEvents(): List<RawFinancialEventEntity>
 
-    @Query("SELECT * FROM raw_financial_events ORDER BY capturedTimestamp DESC LIMIT :limit")
+    /** Newest message first by when it was sent, not when this phone read it (a history scan reads old messages today). */
+    @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
     abstract fun observeRecent(limit: Int): Flow<List<RawFinancialEventEntity>>
 
     /** Uploads that did not go through; messages that are merely not understood are not problems. */
     @Query(
         "SELECT * FROM raw_financial_events WHERE uploadStatus IN ('RETRY','FAILED_PERMANENTLY') " +
             "OR (uploadStatus = 'NEEDS_REVIEW' AND IFNULL(lastError, '') <> 'message format not recognised yet') " +
-            "ORDER BY capturedTimestamp DESC LIMIT :limit",
+            "ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit",
     )
     abstract fun observeUploadProblems(limit: Int): Flow<List<RawFinancialEventEntity>>
 

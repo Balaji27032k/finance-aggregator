@@ -38,10 +38,10 @@ public class AnalyticsService {
     private static final int MAX_GROUPS = 10_000;
     private static final int TOP = 10;
 
-    private final RecentTransactions transactions;
+    private final TransactionQueryService transactions;
     private final Clock clock;
 
-    public AnalyticsService(RecentTransactions transactions, Clock clock) {
+    public AnalyticsService(TransactionQueryService transactions, Clock clock) {
         this.transactions = transactions;
         this.clock = clock;
     }
