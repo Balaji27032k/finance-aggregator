@@ -275,7 +275,9 @@ private fun CloudCard(cloud: CloudUi, pairingMessage: String?, actions: HealthAc
                     OutlinedButton(onClick = actions.retryFailed) { Text("Retry ${cloud.needsAttention} failed") }
                 }
             }
-            TextButton(onClick = actions.resendAll) { Text("Re-upload everything") }
+            TextButton(onClick = actions.resendAll, enabled = cloud.pending == 0) {
+                Text(if (cloud.pending == 0) "Re-upload everything" else "${cloud.pending} events waiting to upload")
+            }
             TextButton(onClick = actions.unpair) { Text("Unpair") }
         }
     }

@@ -7,6 +7,8 @@ import com.personal.financecollector.database.EventDao
 import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.UploadStatus
 import com.personal.financecollector.database.set
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.random.Random
 
 interface TokenSource {
@@ -66,7 +68,10 @@ class UploadRunner(
     private val clock: () -> Long = System::currentTimeMillis,
     private val random: Random = Random.Default,
 ) {
-    suspend fun run(): RunResult {
+    /** One upload run at a time, so a manual sync cannot overlap the periodic one and send the same events twice. */
+    suspend fun run(): RunResult = gate.withLock { runOnce() }
+
+    private suspend fun runOnce(): RunResult {
         val baseUrl = config.get(ConfigKeys.BACKEND_URL)
         val token = credentials.token()
         if (config.get(ConfigKeys.PAIRED) != "true" || baseUrl.isNullOrBlank() || token == null) return RunResult.NotPaired
@@ -135,6 +140,8 @@ class UploadRunner(
     }
 
     companion object {
+        private val gate = Mutex()
+
         // The backend commits one transaction per event over a remote database, so large batches outlast the timeout.
         const val BATCH_SIZE = 10
         const val UNAUTHORIZED = "unauthorized"
