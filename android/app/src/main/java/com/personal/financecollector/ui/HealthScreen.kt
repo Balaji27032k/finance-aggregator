@@ -176,14 +176,15 @@ fun HealthScreen(
         item {
             Panel {
                 Text("Capture", style = MaterialTheme.typography.titleMedium)
-                StatRow("Enabled apps", state.enabledApps.ifEmpty { listOf("none") }.joinToString())
+                Text("Enabled apps", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(state.enabledApps.ifEmpty { listOf("none") }.joinToString(", "), fontWeight = FontWeight.Medium)
                 StatRow("Last event captured", formatTime(state.lastEventAt))
                 StatRow("Last successful upload", formatTime(state.lastUploadAt))
                 StatRow("Pending upload", state.pending.toString())
                 StatRow("Failed upload", state.failed.toString())
                 StatRow("Needs review (parser)", state.parserNeedsReview.toString())
-                StatRow("Ignored (filtered / OTP / unrelated)", state.droppedFiltered.toString())
-                StatRow("Ignored (hidden notification content)", state.droppedHidden.toString())
+                StatRow("Ignored: filtered, OTP, unrelated", state.droppedFiltered.toString())
+                StatRow("Ignored: hidden content", state.droppedHidden.toString())
             }
         }
 

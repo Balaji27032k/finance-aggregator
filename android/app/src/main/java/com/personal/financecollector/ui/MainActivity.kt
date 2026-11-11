@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -36,6 +37,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -133,16 +135,17 @@ class MainActivity : ComponentActivity() {
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
-                val screenActions = actions.copy(openSources = { tab = 4 })
-                BackHandler(enabled = tab == 4) { tab = 3 }
+                val screenActions = actions.copy(openSources = { tab = 5 })
+                BackHandler(enabled = tab == 5) { tab = 4 }
 
                 Scaffold(
                     bottomBar = {
                         NavigationBar {
-                            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview") })
-                            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions") })
-                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity") })
-                            NavigationBarItem(tab == 3 || tab == 4, { tab = 3 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health") })
+                            NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Person, null) }, label = { Text("Admin", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 4 || tab == 5, { tab = 4 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health", maxLines = 1, fontSize = 11.sp) })
                         }
                     },
                 ) { padding ->
@@ -156,7 +159,13 @@ class MainActivity : ComponentActivity() {
                         )
                         1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
                         2 -> EventsScreen(events, body)
-                        3 -> HealthScreen(health, pairingMessage, export, screenActions, body)
+                        3 -> AdminScreen(
+                            backendUrl = health?.cloud?.takeIf { it.paired }?.backendUrl,
+                            onOpen = ::openDashboard,
+                            onCopy = ::copyLink,
+                            modifier = body,
+                        )
+                        4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         else -> SourcesScreen(
                             apps = apps,
                             appSources = sources,
@@ -171,6 +180,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openDashboard(url: String) {
+        val uri = Uri.parse(url)
+        if (uri.scheme != "https") return
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (_: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, "No browser found to open the dashboard", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun copyLink(url: String) {
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Dashboard link", url))
+        Toast.makeText(this, "Link copied", Toast.LENGTH_SHORT).show()
     }
 
     override fun onResume() {
