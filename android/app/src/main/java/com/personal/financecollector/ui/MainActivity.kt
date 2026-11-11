@@ -122,6 +122,8 @@ class MainActivity : ComponentActivity() {
             FinanceTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
                 var openKey by rememberSaveable { mutableStateOf<String?>(null) }
+                var linkedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+                val budget by viewModel.budget.collectAsStateWithLifecycle()
                 val health by viewModel.health.collectAsStateWithLifecycle()
                 val events by viewModel.events.collectAsStateWithLifecycle()
                 val ledger by viewModel.ledger.collectAsStateWithLifecycle()
@@ -146,8 +148,13 @@ class MainActivity : ComponentActivity() {
                 ) { padding ->
                     val body = Modifier.padding(padding)
                     when (tab) {
-                        0 -> OverviewScreen(ledger, onOpen, onSeeAll = { tab = 1 }, modifier = body)
-                        1 -> TransactionsScreen(ledger, onOpen, body)
+                        0 -> OverviewScreen(
+                            ledger, budget, viewModel::setBudget, onOpen,
+                            onOpenCategory = { linkedCategory = it; tab = 1 },
+                            onSeeAll = { tab = 1 },
+                            modifier = body,
+                        )
+                        1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, body)
                         2 -> EventsScreen(events, body)
                         3 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         else -> SourcesScreen(

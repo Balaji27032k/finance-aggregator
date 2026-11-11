@@ -5,6 +5,7 @@ import { api, type Bucket, type Summary, type Txn } from '../api';
 import { categoryStyle } from '../categories';
 import { cleanName, inr, inrShort, longDate, monthLabel, pctChange, shortDate } from '../format';
 import { RangePicker, useRange } from '../range';
+import { Heatmap } from '../Heatmap';
 import { Card, ChartTip, ErrorBox, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
 
 const FULL_DAY: Record<string, string> = {
@@ -91,6 +92,10 @@ export default function Insights() {
               ))}
               {highlights(s).length === 0 && <div className="empty">Not enough data in this period</div>}
             </div>
+          </Card>
+
+          <Card title="Spending calendar" hint="each square is a day; hover for the amount">
+            <Heatmap daily={s.daily} />
           </Card>
 
           <Card title="Last 12 months" hint="money in and out">

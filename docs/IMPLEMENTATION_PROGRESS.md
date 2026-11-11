@@ -59,6 +59,7 @@ JDK 25.0.3, Node 24.16.0, Git 2.54, Docker CLI present (daemon not running; not 
 - Categories are display-only labels from keyword rules on the payee and note (no stored renaming); unknown payees stay "Other". Days follow the date in the message, otherwise India time.
 - Try it without real data: `java -jar target/finance-aggregator-backend-0.1.0-SNAPSHOT.jar --spring.profiles.active=demo --server.port=8099`, open http://localhost:8099, user `demo`, password `demo-password` (in-memory database with made-up transactions; never use in production).
 - Frontend dev: `cd backend/dashboard; npm install; npm run dev` (proxies `/api` to localhost:8080).
+- Usability: category and payee rows on the overview open Transactions already filtered; a monthly budget (kept in the browser, or on the phone) turns the month's pace into "on track / over by"; spending calendar on Insights; the phone has the same budget and category tap-through.
 - Verified: backend 50 tests; `npm run build` clean; every page loaded in a browser against the demo profile with no console errors. NOT verified: behaviour on Render with real data and a real password.
 
 ## Decisions

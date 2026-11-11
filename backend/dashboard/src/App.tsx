@@ -12,7 +12,11 @@ import DataHealth from './pages/DataHealth';
 type Theme = 'dark' | 'light';
 
 function useTheme(): [Theme, () => void] {
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('finance.theme') === 'light' ? 'light' : 'dark'));
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('finance.theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('finance.theme', theme);

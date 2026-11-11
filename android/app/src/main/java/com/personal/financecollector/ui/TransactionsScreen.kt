@@ -26,6 +26,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,10 +90,24 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun TransactionsScreen(ledger: List<LedgerTxn>, onOpen: (LedgerTxn) -> Unit, modifier: Modifier = Modifier) {
+fun TransactionsScreen(
+    ledger: List<LedgerTxn>,
+    onOpen: (LedgerTxn) -> Unit,
+    presetCategory: String? = null,
+    onPresetUsed: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     var query by rememberSaveable { mutableStateOf("") }
     var direction by rememberSaveable { mutableStateOf(Direction.ALL) }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(presetCategory) {
+        if (presetCategory != null) {
+            query = ""
+            direction = Direction.OUT
+            category = presetCategory
+            onPresetUsed()
+        }
+    }
     val today = remember { LocalDate.now(LedgerBuilder.IST) }
 
     val categories = remember(ledger) { ledger.groupingBy { it.category }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }

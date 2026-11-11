@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { api, type Direction, type Txn, type TxnQuery } from '../api';
 import { cleanName, dateTimeIst, inr, longDate } from '../format';
@@ -25,10 +26,11 @@ function toCsv(items: Txn[]): string {
 
 export default function Transactions() {
   const { range } = useRange();
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  const [direction, setDirection] = useState<Direction | ''>('');
-  const [category, setCategory] = useState('');
+  const [params] = useSearchParams();
+  const [text, setText] = useState(params.get('q') ?? '');
+  const [q, setQ] = useState(params.get('q') ?? '');
+  const [direction, setDirection] = useState<Direction | ''>((params.get('direction') as Direction | null) ?? '');
+  const [category, setCategory] = useState(params.get('category') ?? '');
   const [source, setSource] = useState('');
   const [min, setMin] = useState('');
   const [max, setMax] = useState('');
@@ -42,6 +44,16 @@ export default function Transactions() {
     const id = setTimeout(() => setQ(text.trim()), 300);
     return () => clearTimeout(id);
   }, [text]);
+
+  // Links from the overview (a category or payee) land here with filters already set.
+  const linked = params.toString();
+  useEffect(() => {
+    const next = new URLSearchParams(linked);
+    setText(next.get('q') ?? '');
+    setQ(next.get('q') ?? '');
+    setDirection((next.get('direction') as Direction | null) ?? '');
+    setCategory(next.get('category') ?? '');
+  }, [linked]);
 
   const filters: TxnQuery = { from: range.from, to: range.to, direction, category, source, q, minAmount: min, maxAmount: max, sort, order };
   const key = JSON.stringify(filters);
@@ -109,6 +121,9 @@ export default function Transactions() {
           </select>
           <input className="field" style={{ width: 100 }} inputMode="decimal" placeholder="Min ₹" value={min} onChange={(e) => setMin(e.target.value.replace(/[^\d.]/g, ''))} aria-label="Minimum amount" />
           <input className="field" style={{ width: 100 }} inputMode="decimal" placeholder="Max ₹" value={max} onChange={(e) => setMax(e.target.value.replace(/[^\d.]/g, ''))} aria-label="Maximum amount" />
+          {(q || direction || category || source || min || max) && (
+            <button className="btn" onClick={() => { setText(''); setQ(''); setDirection(''); setCategory(''); setSource(''); setMin(''); setMax(''); }}>Clear filters</button>
+          )}
           <button className="btn" onClick={exportCsv} disabled={exporting || !result?.total}><Download size={16} /> {exporting ? 'Preparing...' : 'CSV'}</button>
         </div>
 

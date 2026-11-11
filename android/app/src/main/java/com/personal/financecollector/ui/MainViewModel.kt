@@ -123,6 +123,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val db = (app as FinanceApp).container.db
     private val tick = MutableStateFlow(0)
 
+    /** Monthly spending budget in whole rupees; kept on this phone only. */
+    private val prefs = app.getSharedPreferences("finance_prefs", Context.MODE_PRIVATE)
+    val budget = MutableStateFlow(prefs.getLong("monthly_budget", 0L).takeIf { it > 0 })
+
+    fun setBudget(value: Long?) {
+        prefs.edit().apply { if (value == null) remove("monthly_budget") else putLong("monthly_budget", value) }.apply()
+        budget.value = value
+    }
+
     val installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
 
     val sources: StateFlow<List<ConnectedSourceEntity>> = db.sourceDao().observeByType(SourceType.NOTIFICATION)

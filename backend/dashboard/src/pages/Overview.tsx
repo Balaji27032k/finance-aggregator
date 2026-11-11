@@ -4,9 +4,15 @@ import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContaine
 import { ArrowDownLeft, ArrowUpRight, Gauge, Landmark, PiggyBank, Wallet } from 'lucide-react';
 import { api, type DayPoint, type Txn } from '../api';
 import { categoryStyle } from '../categories';
-import { ago, cleanName, inr, inrShort, longDate, monthLong, parseIso, pctChange, shortDate, toIso } from '../format';
+import { ago, cleanName, inr, inrShort, longDate, parseIso, pctChange, shortDate, toIso } from '../format';
+import { PaceCard } from '../PaceCard';
 import { RangePicker, useRange } from '../range';
-import { Card, ChartTip, Delta, ErrorBox, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
+import { Card, ChartTip, Delta, ErrorBox, Money, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  return hour < 5 ? 'Late night' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+}
 
 function weekly(daily: DayPoint[]): DayPoint[] {
   const out = new Map<string, DayPoint>();
@@ -36,8 +42,8 @@ export default function Overview() {
     <>
       <div className="topbar">
         <div className="page-title">
-          <h1>Overview</h1>
-          <p>{s ? `${longDate(s.range.from)} to ${longDate(s.range.to)}` : 'Loading...'}</p>
+          <h1>{greeting()}</h1>
+          <p>{s ? `Your money from ${longDate(s.range.from)} to ${longDate(s.range.to)}` : 'Loading...'}</p>
         </div>
         <RangePicker />
       </div>
@@ -45,27 +51,36 @@ export default function Overview() {
       {summary.error && <ErrorBox message={summary.error} />}
       {!s && !summary.error && <div className="grid cols-4"><Skeleton /><Skeleton /><Skeleton /><Skeleton /></div>}
 
+      {s && s.totals.count === 0 && s.balances.length === 0 && (
+        <Card>
+          <div className="empty">
+            <strong>No transactions in this period yet.</strong>
+            <p style={{ marginTop: 6 }}>Try a longer range above. If nothing ever shows up, open the phone app, check the Health tab and tap Sync.</p>
+          </div>
+        </Card>
+      )}
+
       {s && (
         <div className="grid" style={{ opacity: summary.loading ? 0.6 : 1, transition: 'opacity 0.15s' }}>
           <div className="grid cols-4">
             <Card className="stat hero">
-              <div className="label"><ArrowUpRight size={16} className="spend" /> Spent</div>
-              <div className="value num">{inr(s.totals.spend, true)}</div>
+              <div className="label" title="Everything that left your accounts in this period"><ArrowUpRight size={16} className="spend" /> Spent</div>
+              <div className="value num"><Money value={s.totals.spend} /></div>
               <div className="delta"><Delta value={pctChange(s.totals.spend, s.previous.spend)} goodWhenUp={false} /> vs previous {s.range.days} days</div>
             </Card>
             <Card className="stat">
-              <div className="label"><ArrowDownLeft size={16} className="income" /> Received</div>
-              <div className="value num">{inr(s.totals.income, true)}</div>
+              <div className="label" title="Everything that came into your accounts in this period"><ArrowDownLeft size={16} className="income" /> Received</div>
+              <div className="value num"><Money value={s.totals.income} /></div>
               <div className="delta"><Delta value={pctChange(s.totals.income, s.previous.income)} goodWhenUp /> vs previous {s.range.days} days</div>
             </Card>
             <Card className="stat">
-              <div className="label"><PiggyBank size={16} /> Kept</div>
-              <div className={`value num ${s.totals.net >= 0 ? 'income' : 'spend'}`}>{s.totals.net >= 0 ? '' : '-'}{inr(Math.abs(s.totals.net), true)}</div>
+              <div className="label" title="Received minus spent"><PiggyBank size={16} /> Kept</div>
+              <div className={`value num ${s.totals.net >= 0 ? 'income' : 'spend'}`}>{s.totals.net >= 0 ? '' : '-'}<Money value={Math.abs(s.totals.net)} /></div>
               <div className="delta">{s.savingsRatePercent !== null ? `${s.savingsRatePercent}% of what came in` : 'No income in this period'}</div>
             </Card>
             <Card className="stat">
-              <div className="label"><Gauge size={16} /> Average per day</div>
-              <div className="value num">{inr(s.totals.avgDailySpend, true)}</div>
+              <div className="label" title="Spent divided by the number of days"><Gauge size={16} /> Average per day</div>
+              <div className="value num"><Money value={s.totals.avgDailySpend} /></div>
               <div className="delta">{s.totals.count} transactions · biggest {inr(s.totals.largestExpense, true)}</div>
             </Card>
           </div>
@@ -111,11 +126,12 @@ export default function Overview() {
                   </div>
                   <div className="legend">
                     {s.byCategory.slice(0, 6).map((b) => (
-                      <div className="legend-item" key={b.key}>
+                      <Link className="legend-item link" key={b.key} to={`/transactions?direction=DEBIT&category=${encodeURIComponent(b.key)}`}
+                        title={`See ${b.key} transactions`}>
                         <span className="dot" style={{ background: categoryStyle(b.key).color }} />
                         <span className="grow">{b.key}</span>
                         <span className="num muted">{Math.round((b.total / categoryTotal) * 100)}%</span>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -124,16 +140,7 @@ export default function Overview() {
           </div>
 
           <div className="grid cols-3">
-            <Card title="This month's pace" hint={monthLong(s.projection.month)}>
-              <div className="num" style={{ fontSize: 24, fontWeight: 700 }}>{inr(s.projection.spentSoFar, true)}</div>
-              <div className="muted">spent in {s.projection.daysElapsed} of {s.projection.daysInMonth} days</div>
-              <div className="bar" style={{ height: 10, marginTop: 14 }}>
-                <span style={{ width: `${Math.min(100, (s.projection.daysElapsed / s.projection.daysInMonth) * 100)}%`, background: 'var(--accent)' }} />
-              </div>
-              <p style={{ marginTop: 14 }}>
-                At this pace the month ends near <strong className="num">{inr(s.projection.projected, true)}</strong>.
-              </p>
-            </Card>
+            <PaceCard pace={s.projection} />
 
             <Card title="Latest balances" hint="from the newest bank message">
               {s.balances.length === 0 ? <div className="empty">No balances in your messages yet</div> : (
@@ -156,14 +163,15 @@ export default function Overview() {
               {s.topPayees.length === 0 ? <div className="empty">Nothing yet</div> : (
                 <div className="rows">
                   {s.topPayees.slice(0, 5).map((p) => (
-                    <div className="row" key={p.key}>
+                    <Link className="row link" key={p.key} to={p.key === 'Unknown' ? '/transactions?direction=DEBIT' : `/transactions?direction=DEBIT&q=${encodeURIComponent(p.key)}`}
+                      title="See these transactions">
                       <span className="avatar" style={{ background: 'var(--surface-2)' }}><Wallet size={18} /></span>
                       <div className="grow">
                         <div className="title">{cleanName(p.key)}</div>
                         <div className="bar"><span style={{ width: `${(p.total / s.topPayees[0].total) * 100}%`, background: 'var(--accent)' }} /></div>
                       </div>
                       <div className="num" style={{ fontWeight: 600 }}>{inr(p.total, true)}</div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -177,6 +185,9 @@ export default function Overview() {
               <div className="empty">{recent.loading ? 'Loading...' : 'No transactions in this period'}</div>
             )}
           </Card>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            Amounts come straight from your bank messages. A transfer between your own accounts shows as money out of one and money in to the other.
+          </p>
         </div>
       )}
       <TxnDrawer txn={open} onClose={() => setOpen(null)} />

@@ -29,8 +29,14 @@ data class LedgerTxn(
     val sources: List<String>,
     val uploaded: Boolean,
 ) {
-    val title: String get() = counterparty ?: paymentMode?.let { "$it ${if (credit) "credit" else "payment"}" } ?: if (credit) "Money received" else "Money sent"
+    val title: String get() = counterparty?.let(::prettyName) ?: paymentMode?.let { "$it ${if (credit) "credit" else "payment"}" } ?: if (credit) "Money received" else "Money sent"
 }
+
+/** Banks often send names in capitals; show them in normal case. Names that already have lower case are left alone. */
+fun prettyName(name: String): String =
+    if (name.length > 3 && name.any { it.isLetter() } && name == name.uppercase()) {
+        name.lowercase().split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
+    } else name
 
 /** Same rules as the server uses to group channels, so the phone and the dashboard agree. */
 object LedgerBuilder {

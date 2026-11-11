@@ -1,6 +1,9 @@
 package com.personal.financecollector.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -43,7 +50,10 @@ import java.time.LocalDate
 @Composable
 fun OverviewScreen(
     ledger: List<LedgerTxn>,
+    budget: Long?,
+    onSetBudget: (Long?) -> Unit,
     onOpen: (LedgerTxn) -> Unit,
+    onOpenCategory: (String) -> Unit,
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -59,7 +69,7 @@ fun OverviewScreen(
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Text("Overview", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
+            Text(greeting(), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
             Text(
                 "${shortDate(stats.from)} to ${shortDate(stats.to)}",
                 style = MaterialTheme.typography.bodySmall,
@@ -94,9 +104,9 @@ fun OverviewScreen(
             }
         }
         if (stats.byCategory.isNotEmpty()) {
-            item { CategoryCard(stats) }
+            item { CategoryCard(stats, onOpenCategory) }
         }
-        item { PaceCard(pace) }
+        item { PaceCard(pace, budget, onSetBudget) }
         if (stats.highlights.isNotEmpty()) {
             item {
                 InfoCard("Insights") {
@@ -119,7 +129,7 @@ fun OverviewScreen(
                         stats.topPayees.forEach { p ->
                             Column {
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(p.key, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(prettyName(p.key), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                     Text(rupeesWhole(p.total), fontWeight = FontWeight.SemiBold)
                                 }
                                 LinearProgressIndicator(
@@ -140,7 +150,36 @@ fun OverviewScreen(
                 }
             }
         }
+        item {
+            Text(
+                "Amounts come straight from your bank messages. A transfer between your own accounts shows as money out of one and money in to the other.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+}
+
+private fun greeting(): String {
+    val hour = java.time.LocalTime.now(LedgerBuilder.IST).hour
+    return when {
+        hour < 5 -> "Late night"
+        hour < 12 -> "Good morning"
+        hour < 17 -> "Good afternoon"
+        else -> "Good evening"
+    }
+}
+
+/** A rupee amount that counts up to its value. */
+@Composable
+private fun AnimatedRupees(value: BigDecimal, style: androidx.compose.ui.text.TextStyle, color: androidx.compose.ui.graphics.Color, bold: Boolean = false) {
+    val shown by animateFloatAsState(value.toFloat(), animationSpec = tween(700), label = "amount")
+    Text(
+        rupeesWhole(BigDecimal(shown.toDouble())),
+        style = style,
+        color = color,
+        fontWeight = if (bold) FontWeight.Bold else FontWeight.SemiBold,
+    )
 }
 
 @Composable
@@ -164,7 +203,7 @@ private fun HeroCard(stats: Stats) {
     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(gradient).padding(20.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Spent", color = onPrimary.copy(alpha = 0.85f))
-            Text(rupeesWhole(stats.totals.spend), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = onPrimary)
+            AnimatedRupees(stats.totals.spend, MaterialTheme.typography.displaySmall, onPrimary, bold = true)
             val change = percentChange(stats.totals.spend, stats.previous.spend)
             Text(
                 when {
@@ -200,13 +239,17 @@ private fun HeroCard(stats: Stats) {
 }
 
 @Composable
-private fun CategoryCard(stats: Stats) {
+private fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
     val total = stats.byCategory.sumOf { it.total }
-    InfoCard("Where it went") {
+    InfoCard("Where it went (tap to see)") {
         CategoryStack(stats.byCategory)
-        Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(top = 8.dp)) {
             stats.byCategory.take(6).forEach { b ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenCategory(b.key) }.padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(CategoryColors.of(b.key)))
                     Text(b.key, modifier = Modifier.weight(1f))
                     Text(
@@ -221,18 +264,79 @@ private fun CategoryCard(stats: Stats) {
 }
 
 @Composable
-private fun PaceCard(pace: MonthPace) {
+private fun PaceCard(pace: MonthPace, budget: Long?, onSetBudget: (Long?) -> Unit) {
+    var editing by remember { mutableStateOf(false) }
     InfoCard("This month's pace") {
-        Text(rupeesWhole(pace.spentSoFar), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            "spent in ${pace.daysElapsed} of ${pace.daysInMonth} days",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        LinearProgressIndicator(
-            progress = { pace.daysElapsed.toFloat() / pace.daysInMonth },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
-        )
-        Text("At this pace the month ends near ${rupeesWhole(pace.projected)}.")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Column {
+                Text(rupeesWhole(pace.spentSoFar), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    "spent in ${pace.daysElapsed} of ${pace.daysInMonth} days",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { editing = true }) { Text(if (budget == null) "Set budget" else "Change") }
+        }
+        val dayShare = pace.daysElapsed.toFloat() / pace.daysInMonth
+        if (budget == null) {
+            LinearProgressIndicator(
+                progress = { dayShare },
+                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
+            )
+            Text("At this pace the month ends near ${rupeesWhole(pace.projected)}.")
+        } else {
+            val budgetValue = BigDecimal(budget)
+            val used = (pace.spentSoFar.toFloat() / budget.toFloat()).coerceIn(0f, 1f)
+            val over = pace.spentSoFar > budgetValue
+            val risk = pace.projected > budgetValue
+            LinearProgressIndicator(
+                progress = { used },
+                color = when {
+                    over -> MoneyColors.spend()
+                    risk -> androidx.compose.ui.graphics.Color(0xFFF59E0B)
+                    else -> MoneyColors.income()
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp).height(10.dp).clip(RoundedCornerShape(5.dp)),
+            )
+            Text(
+                "${(used * 100).toInt()}% of ${rupeesWhole(budgetValue)} used, ${(dayShare * 100).toInt()}% of the month gone",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 6.dp),
+            )
+            val daysLeft = (pace.daysInMonth - pace.daysElapsed).coerceAtLeast(1)
+            val perDay = (budgetValue - pace.spentSoFar).max(BigDecimal.ZERO).divide(BigDecimal(daysLeft), 0, RoundingMode.HALF_UP)
+            Text(
+                when {
+                    over -> "You are ${rupeesWhole(pace.spentSoFar - budgetValue)} over budget."
+                    risk -> "At this pace you will pass the budget by about ${rupeesWhole(pace.projected - budgetValue)}. Keep to about ${rupeesWhole(perDay)} a day to stay within it."
+                    else -> "On track. You can spend about ${rupeesWhole(perDay)} a day for the rest of the month."
+                },
+            )
+        }
     }
+    if (editing) BudgetDialog(budget, onDismiss = { editing = false }, onSave = { onSetBudget(it); editing = false })
+}
+
+@Composable
+private fun BudgetDialog(current: Long?, onDismiss: () -> Unit, onSave: (Long?) -> Unit) {
+    var text by remember { mutableStateOf(current?.toString().orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Monthly budget") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit).take(9) },
+                label = { Text("Amount in rupees") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onSave(text.toLongOrNull()?.takeIf { it > 0 }) }) { Text("Save") } },
+        dismissButton = {
+            TextButton(onClick = { if (current != null) onSave(null) else onDismiss() }) { Text(if (current != null) "Remove" else "Cancel") }
+        },
+    )
 }

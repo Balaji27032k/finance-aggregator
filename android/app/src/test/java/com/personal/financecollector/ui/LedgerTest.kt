@@ -148,6 +148,14 @@ class LedgerTest {
     }
 
     @Test
+    fun capitalNamesAreShownInNormalCaseButMixedCaseIsLeftAlone() {
+        assertEquals("Hungerbox", prettyName("HUNGERBOX"))
+        assertEquals("Sample Employer Limited", prettyName("SAMPLE EMPLOYER LIMITED"))
+        assertEquals("Blue Tokai Coffee", prettyName("Blue Tokai Coffee"))
+        assertEquals("UPI", prettyName("UPI"))
+    }
+
+    @Test
     fun monthPaceProjectsTheMonthEnd() {
         val today = LocalDate.parse("2026-11-10")
         val pace = StatsCalculator.monthPace(listOf(ledger("1", false, "1000", "X", "2026-11-03")), today)

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ArrowDownRight, ArrowUpRight, Minus, X } from 'lucide-react';
 import { categoryStyle } from './categories';
 import { cleanName, dateTimeIst, inr, longDate, sourceLabel } from './format';
@@ -18,6 +18,32 @@ export function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return state;
+}
+
+/** A rupee amount that counts up to its value, unless the system asks for reduced motion. */
+export function Money({ value }: { value: number }) {
+  const [shown, setShown] = useState(value);
+  const from = useRef(value);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      from.current = value;
+      setShown(value);
+      return;
+    }
+    const begin = from.current;
+    const start = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / 600);
+      const v = begin + (value - begin) * (1 - Math.pow(1 - t, 3));
+      from.current = v;
+      setShown(v);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+  return <>{inr(shown, true)}</>;
 }
 
 export function Card({ title, hint, children, className = '' }: { title?: ReactNode; hint?: ReactNode; children: ReactNode; className?: string }) {
