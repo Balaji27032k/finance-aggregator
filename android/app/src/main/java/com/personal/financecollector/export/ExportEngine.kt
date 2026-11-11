@@ -52,7 +52,7 @@ class BackendStagingSink(
                 }
             }
         } catch (e: IOException) {
-            StagingOutcome.Transient(e.javaClass.simpleName)
+            StagingOutcome.Transient("upload to backend: ${e.javaClass.simpleName}")
         }
     }
 
@@ -127,7 +127,7 @@ class SmsExporter(
     private val reader: SmsReader,
     private val progress: ExportProgress,
     private val sink: StagingSink,
-    private val batchSize: Int = 50,
+    private val batchSize: Int = 25,
 ) {
     suspend fun run(): ExportResult {
         var lastId = progress.number(ExportProgress.CHECKPOINT)
@@ -207,7 +207,7 @@ class GmailExporter(
     private val sink: StagingSink,
     private val maxMessages: Int = 20_000,
     private val fetchParallelism: Int = 6,
-    private val chunkSize: Int = 25,
+    private val chunkSize: Int = 10,
 ) {
     suspend fun run(): ExportResult {
         var seen = progress.number(ExportProgress.SEEN)
@@ -245,7 +245,7 @@ class GmailExporter(
         } catch (_: GmailNeedsConsent) {
             ExportResult.Failed("Connect Gmail again (access was not granted)")
         } catch (e: IOException) {
-            ExportResult.Retry(e.javaClass.simpleName)
+            ExportResult.Retry("reading Gmail: ${e.javaClass.simpleName}")
         }
 
         when (result) {

@@ -50,7 +50,17 @@ private suspend fun pairedSink(context: Context, progress: ExportProgress): Stag
         progress.put(ExportProgress.ERROR, "Pair this phone with the backend first")
         return null
     }
-    return BackendStagingSink(container.http, url, token)
+    return BackendStagingSink(container.http, url, token).also { wakeBackend(container.http, url) }
+}
+
+/** The free Render instance sleeps when idle; one patient health request wakes it before the first upload. */
+private suspend fun wakeBackend(http: okhttp3.OkHttpClient, baseUrl: String) = withContext(Dispatchers.IO) {
+    val patient = http.newBuilder().readTimeout(4, TimeUnit.MINUTES).build()
+    try {
+        patient.newCall(okhttp3.Request.Builder().url(baseUrl.trimEnd('/') + "/actuator/health").build()).execute().close()
+    } catch (_: java.io.IOException) {
+        // The upload path reports and retries real failures.
+    }
 }
 
 class SmsExportWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
