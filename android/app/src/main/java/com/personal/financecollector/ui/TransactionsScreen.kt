@@ -107,6 +107,7 @@ fun TransactionsScreen(
     onOpen: (LedgerTxn) -> Unit,
     presetCategory: String? = null,
     presetQuery: String? = null,
+    presetAccount: String? = null,
     onPresetUsed: () -> Unit = {},
     onExport: (List<LedgerTxn>) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -114,20 +115,23 @@ fun TransactionsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var direction by rememberSaveable { mutableStateOf(Direction.ALL) }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(presetCategory, presetQuery) {
-        if (presetCategory != null || presetQuery != null) {
+    var account by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(presetCategory, presetQuery, presetAccount) {
+        if (presetCategory != null || presetQuery != null || presetAccount != null) {
             query = presetQuery.orEmpty()
-            direction = Direction.OUT
+            direction = if (presetAccount != null) Direction.ALL else Direction.OUT
             category = presetCategory
+            account = presetAccount
             onPresetUsed()
         }
     }
     val today = remember { LocalDate.now(LedgerBuilder.IST) }
 
     val categories = remember(ledger) { ledger.flatMap { it.categoryParts.map { p -> p.first } }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }
-    val shown = remember(ledger, query, direction, category) {
+    val shown = remember(ledger, query, direction, category, account) {
         ledger.filter {
             matches(it, query) &&
+                (account == null || it.accountLast4 == account) &&
                 (direction == Direction.ALL || (direction == Direction.IN) == it.credit) &&
                 (category == null || it.category == category || it.splits.any { s -> s.category == category })
         }
@@ -153,6 +157,7 @@ fun TransactionsScreen(
                 }
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                account?.let { a -> item { FilterChip(true, { account = null }, { Text("Account ending $a  \u2715") }) } }
                 items(categories) { c ->
                     FilterChip(category == c, { category = if (category == c) null else c }, { Text(c) })
                 }

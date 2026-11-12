@@ -19,19 +19,22 @@ data class NetWorth(val total: BigDecimal, val accounts: List<AccountBalance>, v
 /** Adds up the latest balance each bank message reported for each account. */
 object NetWorthCalculator {
 
-    fun latestBalances(ledger: List<LedgerTxn>): List<AccountBalance> =
-        ledger.filter { it.balanceAfter != null && it.accountLast4 != null }
-            .groupBy { it.bankCode to it.accountLast4!! }
+    fun latestBalances(ledger: List<LedgerTxn>): List<AccountBalance> {
+        val brand = AccountGrouping.brandOf(ledger)
+        return ledger.filter { it.balanceAfter != null && it.accountLast4 != null }
+            .groupBy { brand(it) to it.accountLast4!! }
             .map { (k, v) ->
                 val last = v.maxBy { it.timeMs }
                 AccountBalance(k.first, k.second, last.balanceAfter!!, last.timeMs)
             }
             .sortedByDescending { it.balance }
+    }
 
     fun compute(ledger: List<LedgerTxn>, excluded: Set<String>, today: LocalDate): NetWorth {
         val accounts = latestBalances(ledger).filter { it.key !in excluded }
-        val byAccount = ledger.filter { it.balanceAfter != null && it.accountLast4 != null && "${it.bankCode}|${it.accountLast4}" !in excluded }
-            .groupBy { "${it.bankCode}|${it.accountLast4}" }
+        val brand = AccountGrouping.brandOf(ledger)
+        val byAccount = ledger.filter { it.balanceAfter != null && it.accountLast4 != null && "${brand(it)}|${it.accountLast4}" !in excluded }
+            .groupBy { "${brand(it)}|${it.accountLast4}" }
             .mapValues { (_, v) -> v.sortedBy { it.timeMs } }
 
         fun totalOn(date: LocalDate): BigDecimal? {

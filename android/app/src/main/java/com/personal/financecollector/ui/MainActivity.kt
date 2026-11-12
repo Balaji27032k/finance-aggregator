@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity() {
                 var openKey by rememberSaveable { mutableStateOf<String?>(null) }
                 var linkedCategory by rememberSaveable { mutableStateOf<String?>(null) }
                 var linkedQuery by rememberSaveable { mutableStateOf<String?>(null) }
+                var linkedAccount by rememberSaveable { mutableStateOf<String?>(null) }
                 val budget by viewModel.budget.collectAsStateWithLifecycle()
                 val health by viewModel.health.collectAsStateWithLifecycle()
                 val notUnderstood by viewModel.notUnderstood.collectAsStateWithLifecycle()
@@ -218,7 +219,7 @@ class MainActivity : ComponentActivity() {
                             modifier = body,
                         )
                         1 -> TransactionsScreen(
-                            ledger, onOpen, linkedCategory, linkedQuery, { linkedCategory = null; linkedQuery = null }, ::exportCsv, body,
+                            ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, body,
                         )
                         2 -> EventsScreen(ledger, notUnderstood, onOpen, body)
                         3 -> AdminScreen(
@@ -244,6 +245,7 @@ class MainActivity : ComponentActivity() {
                             onAddAccount = viewModel::addOwnAccount,
                             onAddName = viewModel::addOwnName,
                             onRemove = viewModel::removeOwn,
+                            onOpenAccount = { linkedAccount = it; linkedCategory = null; linkedQuery = null; tab = 1 },
                             balances = NetWorthCalculator.latestBalances(ledger),
                             netWorthExcluded = netWorthExcluded,
                             onToggleNetWorth = viewModel::setIncludedInNetWorth,

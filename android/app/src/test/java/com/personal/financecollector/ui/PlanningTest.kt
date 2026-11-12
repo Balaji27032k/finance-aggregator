@@ -133,6 +133,31 @@ class PlanningTest {
     }
 
     @Test
+    fun oneBankSeenUnderSeveralSenderNamesIsOneAccountAndOneBalance() {
+        val ledger = listOf(
+            txn("u1", "2026-11-10", bank = "SBIUPI", account = "5867", balance = "900"),
+            txn("c1", "2026-11-15", bank = "CBSSBI", account = "5867", balance = "700"),
+            txn("m1", "2026-11-12", bank = "SBI", account = "5867"),
+            txn("g1", "2026-11-14", bank = "GPAY", account = "5867"),
+            txn("h1", "2026-11-14", bank = "INDBNK", account = "5867", balance = "50"),
+        )
+        assertEquals("SBI", BankBrand.known("SBIUPI"))
+        assertEquals("SBI", BankBrand.known("ATMSBI"))
+        assertEquals("CSB Bank", BankBrand.known("CSBBNK"))
+        // Another bank with the same last digits stays separate, and a payment-app message does not guess which bank.
+        val brand = AccountGrouping.brandOf(ledger)
+        assertEquals("SBI", brand(ledger[0]))
+        assertEquals("SBI", brand(ledger[1]))
+        assertEquals("Indian Bank", brand(ledger[4]))
+        assertEquals("GPAY", brand(ledger[3]))
+        val sbiOnly = ledger.take(3)
+        assertEquals("SBI", AccountGrouping.brandOf(sbiOnly + txn("g2", "2026-11-14", bank = "GPAY", account = "5867"))(txn("g2", "2026-11-14", bank = "GPAY", account = "5867")))
+        val nw = NetWorthCalculator.compute(sbiOnly, emptySet(), today)
+        assertEquals(1, nw.accounts.size)
+        assertEquals(BigDecimal("700"), nw.total)
+    }
+
+    @Test
     fun onlyChangedTransactionsAreSentAndRevertedOnesAreCleared() {
         val edited = txn("e1", "2026-11-04").copy(edited = true, userCategory = "Food", category = "Food", label = "milk")
         val untouched = txn("u1", "2026-11-05")

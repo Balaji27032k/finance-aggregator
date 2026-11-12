@@ -1,6 +1,8 @@
 package com.personal.financecollector.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +35,7 @@ fun OwnAccountsScreen(
     onAddAccount: (String) -> Boolean,
     onAddName: (String) -> Boolean,
     onRemove: (String) -> Unit,
+    onOpenAccount: (String) -> Unit,
     balances: List<AccountBalance>,
     netWorthExcluded: Set<String>,
     onToggleNetWorth: (String, Boolean) -> Unit,
@@ -59,11 +62,13 @@ fun OwnAccountsScreen(
             Text("Found in your messages", style = MaterialTheme.typography.titleMedium)
             if (detected.isEmpty()) Text("No accounts seen yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             detected.forEach { a ->
-                StatRow("${a.bankCode} ending ${a.last4}", "${a.count} transactions")
+                Box(Modifier.clickable { onOpenAccount(a.last4) }.padding(vertical = 4.dp)) {
+                    StatRow("${a.bankCode} ending ${a.last4}", "${a.count} transaction${if (a.count == 1) "" else "s"} \u203a")
+                }
             }
             if (detected.isNotEmpty()) {
                 Text(
-                    "These are counted as yours automatically, because the bank messaged you about them.",
+                    "Tap an account to see its transactions. Messages from the same bank under different names (for example SBIUPI and CBSSBI) are one account here. These are counted as yours automatically.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

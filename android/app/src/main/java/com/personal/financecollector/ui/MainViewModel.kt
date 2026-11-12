@@ -228,7 +228,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Accounts seen in messages, so they can be shown as "yours" without any typing. */
     val detectedAccounts: StateFlow<List<DetectedAccount>> = baseLedger.map { list ->
-        list.filter { it.accountLast4 != null }.groupBy { it.bankCode to it.accountLast4!! }
+        val brand = AccountGrouping.brandOf(list)
+        list.filter { it.accountLast4 != null }.groupBy { brand(it) to it.accountLast4!! }
             .map { (k, v) -> DetectedAccount(k.first, k.second, v.size) }.sortedByDescending { it.count }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
