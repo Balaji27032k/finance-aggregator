@@ -228,7 +228,7 @@ class AskEngineTest {
             }
 
             public Optional<String> generate(String system, String user, boolean json) {
-                seen.add(system.startsWith("You are a kind") ? "ADVICE:" + user : user);
+                seen.add(system.startsWith("You are an expert") ? "ADVICE:" + user : user);
                 return json
                         ? Optional.of("{\"intent\":\"advice\",\"terms\":[],\"related\":[],\"from\":\"2026-06-01\",\"to\":\"2026-11-12\",\"periodLabel\":\"the last 6 months\"}")
                         : Optional.of("You are keeping most of what you earn. Food is your biggest category.");
@@ -245,6 +245,51 @@ class AskEngineTest {
         assertTrue(seen.get(1).contains("savingsRatePercent") && seen.get(1).contains("topCategories") && seen.get(1).contains("months"));
         assertFalse(seen.get(1).contains("5867"));
         assertTrue(r.answer().startsWith("You are keeping most"));
+    }
+
+    @Test
+    void investmentQuestionsGoToTheCoachWithTheProfileAndExactCalculations() {
+        List<String> seen = new ArrayList<>();
+        AiModel model = new AiModel() {
+            public boolean configured() {
+                return true;
+            }
+
+            public Optional<String> generate(String system, String user, boolean json) {
+                seen.add(user);
+                return json
+                        ? Optional.of("{\"intent\":\"coach\",\"terms\":[],\"related\":[],\"from\":\"2026-10-01\",\"to\":\"2026-11-12\",\"periodLabel\":\"recently\","
+                        + "\"calcs\":[{\"type\":\"sip_needed\",\"amount\":2000000,\"rate\":12,\"years\":8},{\"type\":\"bogus\",\"amount\":1,\"rate\":1,\"years\":1}]}")
+                        : Optional.of("Start with a bigger emergency fund, then a SIP.");
+            }
+        };
+        com.personal.finance.dto.Profile profile = new com.personal.finance.dto.Profile("Balaji Secret", 32, "SALARIED", 80000L, "STABLE", 2, "MEDIUM",
+                "SOME", "NEW", 150000L, 500000L, 10000000L,
+                List.of(new com.personal.finance.dto.Profile.Goal("House at 5867 street", 2000000L, 2034, "HIGH")),
+                List.of(new com.personal.finance.dto.Profile.Holding("PPF", 300000L, 5000L)),
+                List.of(new com.personal.finance.dto.Profile.Loan("Car loan", 400000L, 12000L, 9.5)), null, "call 9876543210");
+        Response r = engine(model).ask(new Request("should I put my surplus in PPF or mutual funds for my house goal?", null), sample(), profile);
+        assertTrue(r.aiUsed());
+        assertEquals("coach", r.intent());
+        String facts = seen.get(1);
+        assertTrue(facts.contains("monthlySip"), facts);
+        assertTrue(facts.contains("emergencyFundTargets") && facts.contains("totalMonthlyEmis") && facts.contains("\"equity\":12"), facts);
+        assertFalse(facts.contains("bogus"));
+        for (String prompt : seen) {
+            assertFalse(prompt.contains("Balaji"), "the name is never sent");
+            assertFalse(prompt.contains("5867"));
+            assertFalse(prompt.contains("9876543210"));
+        }
+        assertEquals("Start with a bigger emergency fund, then a SIP.", r.answer());
+    }
+
+    @Test
+    void withoutTheAiACoachingQuestionSaysItNeedsTheAiAndSpendingQuestionsStaySpending() {
+        Response coach = engine(off()).ask(new Request("should I invest in PPF or an FD?", null), sample());
+        assertEquals("coach", coach.intent());
+        assertFalse(coach.aiUsed());
+        assertTrue(coach.answer().contains("need the AI"));
+        assertEquals("spend_on", engine(off()).ask(new Request("how much did I spend on emi", null), sample()).intent());
     }
 
     @Test
