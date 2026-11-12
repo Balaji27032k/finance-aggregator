@@ -45,13 +45,16 @@ abstract class EventDao {
     @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
     abstract suspend fun recentList(limit: Int): List<RawFinancialEventEntity>
 
-    /** Uploads that did not go through; messages that are merely not understood are not problems. */
+    /** Messages that were captured but could not be read as a transaction. */
     @Query(
-        "SELECT * FROM raw_financial_events WHERE uploadStatus IN ('RETRY','FAILED_PERMANENTLY') " +
-            "OR (uploadStatus = 'NEEDS_REVIEW' AND IFNULL(lastError, '') <> 'message format not recognised yet') " +
+        "SELECT * FROM raw_financial_events WHERE uploadStatus = 'NEEDS_REVIEW' " +
+            "AND IFNULL(lastError, '') = 'message format not recognised yet' " +
             "ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit",
     )
-    abstract fun observeUploadProblems(limit: Int): Flow<List<RawFinancialEventEntity>>
+    abstract fun observeNotUnderstood(limit: Int): Flow<List<RawFinancialEventEntity>>
+
+    @Query("DELETE FROM raw_financial_events WHERE sourceType = 'NOTIFICATION' AND sourceApplication = :app")
+    abstract suspend fun deleteEventsFromApp(app: String)
 
     @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('PENDING','UPLOADING','RETRY')")
     abstract fun observePendingCount(): Flow<Int>
@@ -178,6 +181,9 @@ abstract class SourceDao {
 
     @Query("SELECT identifier FROM connected_sources WHERE sourceType = :type AND enabled = 1")
     abstract suspend fun enabledIdentifiers(type: SourceType): List<String>
+
+    @Query("DELETE FROM connected_sources WHERE sourceType = :type AND identifier = :identifier")
+    abstract suspend fun delete(type: SourceType, identifier: String)
 
     @Transaction
     open suspend fun upsert(type: SourceType, identifier: String, displayName: String, enabled: Boolean, now: Long) {

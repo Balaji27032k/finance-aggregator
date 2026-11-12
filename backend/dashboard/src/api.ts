@@ -32,7 +32,7 @@ export interface MonthPoint { month: string; income: number; spend: number }
 export interface Bucket { key: string; total: number; count: number }
 export interface Recurring { name: string; typicalAmount: number; occurrences: number; lastDate: string; nextExpected: string }
 export interface AccountBalance { bankCode: string; accountLast4: string; balance: number; asOf: string }
-export interface Projection { month: string; spentSoFar: number; projected: number; daysElapsed: number; daysInMonth: number }
+export interface Projection { month: string; spentSoFar: number; projected: number; daysElapsed: number; daysInMonth: number; dailyRate: number }
 
 export interface Summary {
   range: { from: string; to: string; days: number };
@@ -136,7 +136,8 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   logout: () => request<void>('/api/admin/logout', { method: 'POST' }),
-  summary: (from: string, to: string) => request<Summary>(`/api/admin/summary?${query({ from, to })}`),
+  summary: (from: string, to: string, previous?: { from: string; to: string }) =>
+    request<Summary>(`/api/admin/summary?${query({ from, to, previousFrom: previous?.from, previousTo: previous?.to })}`),
   transactions: (q: TxnQuery) => request<TxnPage>(`/api/admin/transactions?${query({ ...q })}`),
   health: () => request<Health>('/api/admin/health'),
 };

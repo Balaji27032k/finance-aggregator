@@ -84,6 +84,18 @@ private val shortFormat = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 fun rupeesWhole(amount: BigDecimal): String =
     EventPresenter.rupees(amount.setScale(0, RoundingMode.HALF_UP)).substringBefore('.')
 
+/** Compact form for chart scales: 800, 1.5k, 12k, 1.2L, 2Cr. */
+fun rupeesShort(amount: BigDecimal): String {
+    val v = amount.toDouble()
+    fun trim(x: Double) = if (x % 1.0 == 0.0) "%.0f".format(Locale.ENGLISH, x) else "%.1f".format(Locale.ENGLISH, x)
+    return "\u20b9" + when {
+        v >= 1e7 -> trim(v / 1e7) + "Cr"
+        v >= 1e5 -> trim(v / 1e5) + "L"
+        v >= 1e3 -> trim(v / 1e3) + "k"
+        else -> "%.0f".format(Locale.ENGLISH, v)
+    }
+}
+
 fun dayLabel(date: LocalDate, today: LocalDate): String = when {
     date == today -> "Today"
     date == today.minusDays(1) -> "Yesterday"
@@ -92,3 +104,9 @@ fun dayLabel(date: LocalDate, today: LocalDate): String = when {
 }
 
 fun shortDate(date: LocalDate): String = date.format(shortFormat)
+
+private val clockFormat = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
+
+/** The time a message was received, in India time, such as 3:42 PM. */
+fun timeOfDay(millis: Long): String =
+    java.time.Instant.ofEpochMilli(millis).atZone(LedgerBuilder.IST).format(clockFormat)

@@ -154,7 +154,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Every understood transaction on the phone, merged across SMS, e-mail and notifications. Parsed off the main thread. */
-    val uploadProblems: StateFlow<List<RawFinancialEventEntity>> = db.eventDao().observeUploadProblems(300)
+    val notUnderstood: StateFlow<List<RawFinancialEventEntity>> = db.eventDao().observeNotUnderstood(300)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val parsedCache = HashMap<String, ParsedTransaction?>()
@@ -185,8 +185,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .map { (k, v) -> DetectedAccount(k.first, k.second, v.size) }.sortedByDescending { it.count }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Saves what the user says this transaction was; [category] null keeps the automatic one. */
-    fun saveLabel(txn: LedgerTxn, category: String?, label: String?, rememberPayee: Boolean) {
+    /** Saves what the user says this transaction was; [category] null keeps the automatic one, [ruleCategory] applies to the whole payee. */
+    fun saveLabel(txn: LedgerTxn, category: String?, label: String?, ruleCategory: String?) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val text = label?.trim()?.take(60)?.ifBlank { null }
@@ -196,8 +196,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 txn.eventIds.forEach { labelDao.upsertLabel(TransactionLabelEntity(it, category, text, now)) }
             }
             val key = LedgerOverlay.payeeKey(txn.counterparty)
-            if (rememberPayee && category != null && key != null) labelDao.upsertRule(PayeeRuleEntity(key, category, now))
+            if (ruleCategory != null && key != null) labelDao.upsertRule(PayeeRuleEntity(key, ruleCategory.take(30), now))
         }
+    }
+
+    val payeeRules: StateFlow<List<PayeeRuleEntity>> = labelDao.observeRules()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setPayeeRule(key: String, category: String) {
+        viewModelScope.launch { labelDao.upsertRule(PayeeRuleEntity(key, category.trim().take(30), System.currentTimeMillis())) }
+    }
+
+    fun removePayeeRule(key: String) {
+        viewModelScope.launch { labelDao.deleteRule(key) }
     }
 
     /** Goes back to the automatic category and removes the description; a payee rule, if any, still applies. */
@@ -522,15 +533,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             db.configDao().deleteKeys(ConfigKeys.SMS_SCAN_KEYS)
             // An explicit NOT_STARTED stops the history scan from silently re-importing what was just deleted.
             db.configDao().set(ConfigKeys.SMS_SCAN_STATE, SmsScanState.NOT_STARTED.name)
-        }
-    }
-
-    /** Enables this app as a source so the debug test notification is captured, then runs [post]. */
-    fun prepareTestSource(post: () -> Unit) {
-        viewModelScope.launch {
-            val ctx = getApplication<Application>()
-            db.sourceDao().upsert(SourceType.NOTIFICATION, ctx.packageName, "Finance Collector (test)", true, System.currentTimeMillis())
-            post()
         }
     }
 

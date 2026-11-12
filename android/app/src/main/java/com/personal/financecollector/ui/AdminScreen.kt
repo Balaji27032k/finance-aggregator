@@ -156,12 +156,12 @@ private fun AdminHome(vm: AdminViewModel, budget: Long?, onSetBudget: (Long?) ->
         }
         when (tab) {
             AdminTab.SUMMARY -> {
-                LaunchedEffect(period, refresh) { vm.loadSummary(from, to) }
+                LaunchedEffect(period, refresh) { vm.loadSummary(from, to, period.previous(today)) }
                 SummaryTab(
                     state = summary,
                     budget = budget,
                     onSetBudget = onSetBudget,
-                    onRetry = { vm.loadSummary(from, to) },
+                    onRetry = { vm.loadSummary(from, to, period.previous(today)) },
                     onOpen = { openKey = it.key },
                     onOpenCategory = { category = it; tab = AdminTab.TRANSACTIONS },
                 )

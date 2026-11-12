@@ -40,6 +40,7 @@ object LedgerOverlay {
             t.copy(
                 label = label,
                 edited = explicit != null || label != null || rule != null,
+                userCategory = explicit,
                 category = category,
                 internalTransfer = category == Categories.OWN_TRANSFER,
             ) to (settled != null)

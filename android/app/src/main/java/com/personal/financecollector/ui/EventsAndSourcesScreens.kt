@@ -1,4 +1,4 @@
-package com.personal.financecollector.ui
+﻿package com.personal.financecollector.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,108 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.personal.financecollector.database.ConnectedSourceEntity
 import com.personal.financecollector.database.RawFinancialEventEntity
-
-private enum class ActivityFilter(val label: String) { ALL("All"), FAILED("Failed"), WAITING("Waiting") }
-
-@Composable
-fun EventsScreen(
-    events: List<RawFinancialEventEntity>,
-    problems: List<RawFinancialEventEntity>,
-    ledger: List<LedgerTxn>,
-    onEdit: (LedgerTxn) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var filter by rememberSaveable { mutableStateOf(ActivityFilter.ALL) }
-    val byEvent = remember(ledger) { ledger.flatMap { t -> t.eventIds.map { it to t } }.toMap() }
-    val waiting = remember(events) {
-        events.filter { EventPresenter.statusKind(it.uploadStatus) == StatusKind.WAITING }
-    }
-    val shown = when (filter) {
-        ActivityFilter.ALL -> events
-        ActivityFilter.FAILED -> problems
-        ActivityFilter.WAITING -> waiting
-    }
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Text("Activity", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
-        Text(
-            "Every message and notification captured on this phone, newest first.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        if (problems.isNotEmpty()) {
-            Panel(container = MaterialTheme.colorScheme.errorContainer, modifier = Modifier.padding(bottom = 8.dp)) {
-                Text("${problems.size} upload${if (problems.size == 1) "" else "s"} did not go through", style = MaterialTheme.typography.titleSmall)
-                Text("Open Failed to see why. Health > Sync now retries them.", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-            items(ActivityFilter.entries) { f ->
-                val count = when (f) {
-                    ActivityFilter.ALL -> events.size
-                    ActivityFilter.FAILED -> problems.size
-                    ActivityFilter.WAITING -> waiting.size
-                }
-                FilterChip(filter == f, { filter = f }, { Text("${f.label} ($count)") })
-            }
-        }
-        if (shown.isEmpty()) {
-            Text(
-                when (filter) {
-                    ActivityFilter.ALL -> "Nothing captured yet. New bank messages and payment notifications appear here automatically."
-                    ActivityFilter.FAILED -> "No failed uploads."
-                    ActivityFilter.WAITING -> "Nothing is waiting to upload."
-                },
-            )
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(shown, key = { it.localEventId }) { EventRow(it, byEvent[it.localEventId], onEdit) }
-        }
-    }
-}
-
-private fun statusColor(kind: StatusKind): Color = when (kind) {
-    StatusKind.DONE -> Color(0xFF2E7D32)
-    StatusKind.WAITING -> Color(0xFF1565C0)
-    StatusKind.RETRYING -> Color(0xFFEF6C00)
-    StatusKind.FAILED -> Color(0xFFC62828)
-    StatusKind.REVIEW -> Color(0xFF8D6E00)
-}
-
-@Composable
-private fun EventRow(event: RawFinancialEventEntity, txn: LedgerTxn?, onEdit: (LedgerTxn) -> Unit) {
-    var expanded by remember(event.localEventId) { mutableStateOf(false) }
-    val card = remember(event.localEventId, event.uploadStatus, event.lastError) { EventPresenter.present(event) }
-    Panel(Modifier.clickable { expanded = !expanded }) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(card.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            card.amount?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (card.credit == true) MoneyColors.income() else MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-        Text(card.details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Received ${card.received}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        card.extra?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        card.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-        txn?.label?.let { Text("“$it”  ·  ${txn.category}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
-        StatusPill(card.status, statusColor(card.statusKind))
-        card.problem?.let {
-            Text("Why: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        }
-        if (txn != null) {
-            TextButton(onClick = { onEdit(txn) }) { Text(if (txn.edited) "Edit category or note" else "Add a note or change category") }
-        }
-        if (expanded) {
-            Text("Captured ${formatTime(event.capturedTimestamp)}", style = MaterialTheme.typography.bodySmall)
-            Text("Parser: ${event.parserVersion}  Retries: ${event.retryCount}  Last error: ${event.lastError ?: "none"}", style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
 
 private val financeHint = Regex("""sbi|yono|indian bank|indbank|csb|pay|bank|upi|wallet""", RegexOption.IGNORE_CASE)
 

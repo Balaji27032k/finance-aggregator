@@ -52,12 +52,6 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val adminViewModel: AdminViewModel by viewModels()
 
-    private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) startTestNotification()
-            else Toast.makeText(this, "Allow notifications to send a test alert", Toast.LENGTH_LONG).show()
-        }
-
     private val smsPermission =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             viewModel.refreshSystemState()
@@ -128,7 +122,6 @@ class MainActivity : ComponentActivity() {
                 viewModel.refreshSystemState()
             },
             setPaused = viewModel::setPaused,
-            sendTestNotification = ::requestTestNotification,
             deleteLocalData = viewModel::deleteLocalData,
             requestSmsPermission = {
                 smsPermission.launch(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS))
@@ -146,16 +139,18 @@ class MainActivity : ComponentActivity() {
             checkGmail = viewModel::checkGmailNow,
             openSources = {},
             openAccounts = {},
+            openPayees = {},
         )
         setContent {
             FinanceTheme {
                 var tab by rememberSaveable { mutableIntStateOf(0) }
                 var openKey by rememberSaveable { mutableStateOf<String?>(null) }
                 var linkedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+                var linkedQuery by rememberSaveable { mutableStateOf<String?>(null) }
                 val budget by viewModel.budget.collectAsStateWithLifecycle()
                 val health by viewModel.health.collectAsStateWithLifecycle()
-                val events by viewModel.events.collectAsStateWithLifecycle()
-                val uploadProblems by viewModel.uploadProblems.collectAsStateWithLifecycle()
+                val notUnderstood by viewModel.notUnderstood.collectAsStateWithLifecycle()
+                val payeeRules by viewModel.payeeRules.collectAsStateWithLifecycle()
                 val ledger by viewModel.ledger.collectAsStateWithLifecycle()
                 val sources by viewModel.sources.collectAsStateWithLifecycle()
                 val smsSources by viewModel.smsSources.collectAsStateWithLifecycle()
@@ -163,7 +158,7 @@ class MainActivity : ComponentActivity() {
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
-                val screenActions = actions.copy(openSources = { tab = 5 }, openAccounts = { tab = 6 })
+                val screenActions = actions.copy(openSources = { tab = 5 }, openAccounts = { tab = 6 }, openPayees = { tab = 7 })
                 BackHandler(enabled = tab >= 5) { tab = 4 }
                 val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
                 val detectedAccounts by viewModel.detectedAccounts.collectAsStateWithLifecycle()
@@ -189,12 +184,15 @@ class MainActivity : ComponentActivity() {
                     when (tab) {
                         0 -> OverviewScreen(
                             ledger, budget, viewModel::setBudget, onOpen,
-                            onOpenCategory = { linkedCategory = it; tab = 1 },
+                            onOpenCategory = { linkedCategory = it; linkedQuery = null; tab = 1 },
+                            onOpenPayee = { linkedQuery = it; linkedCategory = null; tab = 1 },
                             onSeeAll = { tab = 1 },
                             modifier = body,
                         )
-                        1 -> TransactionsScreen(ledger, onOpen, linkedCategory, { linkedCategory = null }, ::exportCsv, body)
-                        2 -> EventsScreen(events, uploadProblems, ledger, onOpen, body)
+                        1 -> TransactionsScreen(
+                            ledger, onOpen, linkedCategory, linkedQuery, { linkedCategory = null; linkedQuery = null }, ::exportCsv, body,
+                        )
+                        2 -> EventsScreen(ledger, notUnderstood, onOpen, body)
                         3 -> AdminScreen(
                             vm = adminViewModel,
                             paired = health?.cloud?.paired == true,
@@ -212,7 +210,7 @@ class MainActivity : ComponentActivity() {
                             onAddSms = viewModel::addSmsSender,
                             modifier = body,
                         )
-                        else -> OwnAccountsScreen(
+                        6 -> OwnAccountsScreen(
                             detected = detectedAccounts,
                             entries = ownEntries,
                             onAddAccount = viewModel::addOwnAccount,
@@ -220,9 +218,13 @@ class MainActivity : ComponentActivity() {
                             onRemove = viewModel::removeOwn,
                             modifier = body,
                         )
+                        else -> PayeesScreen(ledger, payeeRules, viewModel::setPayeeRule, viewModel::removePayeeRule, body)
                     }
                     ledger.firstOrNull { it.key == openKey }?.let {
-                        TxnDetailSheet(it, onDismiss = { openKey = null }, onSave = viewModel::saveLabel, onReset = viewModel::resetLabel)
+                        TxnDetailSheet(
+                            it, onDismiss = { openKey = null }, onSave = viewModel::saveLabel, onReset = viewModel::resetLabel,
+                            onManagePayees = { tab = 7 },
+                        )
                     }
                 }
             }
@@ -233,29 +235,5 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         viewModel.refreshSystemState()
         viewModel.ensureSmsScan()
-    }
-
-    private fun requestTestNotification() {
-        val needsPermission = Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        if (needsPermission) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else startTestNotification()
-    }
-
-    private fun startTestNotification() = viewModel.prepareTestSource { postTestNotification() }
-
-    private fun postTestNotification() {
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(TEST_CHANNEL, "Test alerts", NotificationManager.IMPORTANCE_DEFAULT))
-        val notification = NotificationCompat.Builder(this, TEST_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Test bank alert")
-            .setContentText("INR 500.00 credited to A/c XX0000 via UPI. Ref 000000000000. (test)")
-            .setAutoCancel(true)
-            .build()
-        manager.notify(System.currentTimeMillis().toInt(), notification)
-    }
-
-    private companion object {
-        const val TEST_CHANNEL = "test_alerts"
     }
 }

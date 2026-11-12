@@ -86,6 +86,9 @@ class FinanceApp : Application() {
         com.personal.financecollector.sync.BankMailScheduler.ensurePeriodic(this)
         // Only package names that are certain are seeded; other banks are chosen in Manage Sources.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // An earlier build had a self-test that listened to this app's own notifications; remove what it left behind.
+            container.db.eventDao().deleteEventsFromApp(packageName)
+            container.db.sourceDao().delete(SourceType.NOTIFICATION, packageName)
             container.db.sourceDao().insertIgnore(
                 com.personal.financecollector.database.ConnectedSourceEntity(
                     sourceType = SourceType.NOTIFICATION,

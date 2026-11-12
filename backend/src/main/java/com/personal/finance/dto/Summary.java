@@ -8,6 +8,7 @@ import java.util.List;
 /** Everything the dashboard's overview and insights pages show for one date range. */
 public record Summary(
         Range range,
+        Range previousRange,
         Totals totals,
         Totals previous,
         BigDecimal savingsRatePercent,
@@ -48,6 +49,7 @@ public record Summary(
     public record AccountBalance(String bankCode, String accountLast4, BigDecimal balance, Instant asOf) {
     }
 
-    public record Projection(String month, BigDecimal spentSoFar, BigDecimal projected, int daysElapsed, int daysInMonth) {
+    public record Projection(String month, BigDecimal spentSoFar, BigDecimal projected, int daysElapsed, int daysInMonth,
+                             BigDecimal dailyRate) {
     }
 }

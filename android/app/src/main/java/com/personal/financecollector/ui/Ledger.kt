@@ -10,6 +10,9 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+/** One channel's copy of a transaction, for example the SMS or the e-mail. */
+data class TxnPart(val source: String, val kind: StatusKind, val statusText: String, val capturedMs: Long, val problem: String?)
+
 /** One real transaction, merged from every channel (SMS, e-mail, notification) that reported it. */
 data class LedgerTxn(
     val key: String,
@@ -36,6 +39,13 @@ data class LedgerTxn(
     val edited: Boolean = false,
     /** Moves money between the user's own accounts; left out of spending and income totals. */
     val internalTransfer: Boolean = false,
+    /** How each channel's copy of this transaction stands with the server. */
+    val parts: List<TxnPart> = emptyList(),
+    /** The worst upload state across the channels. */
+    val status: StatusKind = StatusKind.DONE,
+    val problem: String? = null,
+    /** The category the user picked for this one transaction, if any (a payee rule is not counted here). */
+    val userCategory: String? = null,
 ) {
     val title: String get() = counterparty?.let(::prettyName) ?: paymentMode?.let { "$it ${if (credit) "credit" else "payment"}" } ?: if (credit) "Money received" else "Money sent"
 }
@@ -125,6 +135,13 @@ object LedgerBuilder {
         val note = pick { it.note }
         val credit = first.parsed.direction == "CREDIT"
         val date = pick { it.transactionDate } ?: Instant.ofEpochMilli(earliest).atZone(IST).toLocalDate()
+        val parts = ordered.map {
+            TxnPart(
+                sourceName(it.event.sourceType), EventPresenter.statusKind(it.event), EventPresenter.statusLabel(it.event.uploadStatus),
+                it.event.capturedTimestamp, EventPresenter.problem(it.event),
+            )
+        }
+        val worst = severity.first { s -> parts.any { it.kind == s } }
         return LedgerTxn(
             key = first.event.localEventId,
             credit = credit,
@@ -143,8 +160,13 @@ object LedgerBuilder {
             sources = ordered.map { sourceName(it.event.sourceType) }.distinct(),
             uploaded = group.items.all { it.event.uploadStatus == UploadStatus.SYNCED },
             eventIds = group.items.map { it.event.localEventId },
+            parts = parts,
+            status = worst,
+            problem = parts.firstOrNull { it.kind == StatusKind.FAILED || it.kind == StatusKind.RETRYING }?.problem,
         )
     }
+
+    private val severity = listOf(StatusKind.FAILED, StatusKind.RETRYING, StatusKind.WAITING, StatusKind.REVIEW, StatusKind.DONE)
 
     private fun sourceName(type: SourceType): String = when (type) {
         SourceType.GMAIL -> "Email"

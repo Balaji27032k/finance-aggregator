@@ -23,7 +23,26 @@ enum class Period(val label: String) {
         THREE_MONTHS -> today.minusDays(89) to today
         YEAR -> today.minusDays(364) to today
     }
+
+    /** What this period is compared with: the same days of last month for "this month", otherwise the stretch just before it. */
+    fun previous(today: LocalDate): Comparison {
+        val (from, to) = range(today)
+        val days = ChronoUnit.DAYS.between(from, to).toInt() + 1
+        return when (this) {
+            MONTH -> {
+                val start = from.minusMonths(1)
+                Comparison(start, start.plusDays(minOf(days.toLong(), start.lengthOfMonth().toLong()) - 1), "the same days last month")
+            }
+            LAST_MONTH -> {
+                val start = from.minusMonths(1)
+                Comparison(start, start.withDayOfMonth(start.lengthOfMonth()), "the month before")
+            }
+            else -> Comparison(from.minusDays(days.toLong()), from.minusDays(1), "the previous $days days")
+        }
+    }
 }
+
+data class Comparison(val from: LocalDate, val to: LocalDate, val label: String)
 
 data class Totals(val income: BigDecimal, val spend: BigDecimal, val count: Int) {
     val net: BigDecimal get() = income - spend
@@ -31,7 +50,14 @@ data class Totals(val income: BigDecimal, val spend: BigDecimal, val count: Int)
 
 data class Bucket(val key: String, val total: BigDecimal, val count: Int)
 data class DayAmount(val date: LocalDate, val spend: BigDecimal, val income: BigDecimal)
-data class MonthPace(val spentSoFar: BigDecimal, val projected: BigDecimal, val daysElapsed: Int, val daysInMonth: Int)
+/** [dailyRate] is the usual day-to-day spending the projection is built on; one-off large payments are left out of it. */
+data class MonthPace(
+    val spentSoFar: BigDecimal,
+    val projected: BigDecimal,
+    val daysElapsed: Int,
+    val daysInMonth: Int,
+    val dailyRate: BigDecimal = BigDecimal.ZERO,
+)
 
 data class Stats(
     val from: LocalDate,
@@ -45,6 +71,8 @@ data class Stats(
     val topPayees: List<Bucket>,
     val biggest: List<LedgerTxn>,
     val highlights: List<String>,
+    /** Words for what [previous] covers, for example "the same days last month". */
+    val previousLabel: String = "the previous $days days",
 )
 
 object StatsCalculator {
@@ -58,12 +86,13 @@ object StatsCalculator {
         count = list.size,
     )
 
-    fun compute(everything: List<LedgerTxn>, from: LocalDate, to: LocalDate): Stats {
+    fun compute(everything: List<LedgerTxn>, from: LocalDate, to: LocalDate, comparison: Comparison? = null): Stats {
         // Moving money between your own accounts is neither spending nor income.
         val all = everything.filter { !it.internalTransfer }
         val days = ChronoUnit.DAYS.between(from, to).toInt() + 1
         val inRange = between(all, from, to)
-        val previous = between(all, from.minusDays(days.toLong()), from.minusDays(1))
+        val against = comparison ?: Comparison(from.minusDays(days.toLong()), from.minusDays(1), "the previous $days days")
+        val previous = between(all, against.from, against.to)
         val totals = totals(inRange)
         val prevTotals = totals(previous)
         val savings = if (totals.income.signum() > 0) {
@@ -78,36 +107,63 @@ object StatsCalculator {
         }
         val debits = inRange.filter { !it.credit }
         val byCategory = buckets(debits) { it.category }
-        val topPayees = buckets(debits) { it.counterparty?.trim()?.ifEmpty { null } ?: "Unknown" }.take(5)
+        val topPayees = payeeBuckets(debits).take(5)
         val biggest = debits.sortedByDescending { it.amount }.take(3)
 
         return Stats(from, to, days, totals, prevTotals, savings, daily, byCategory, topPayees, biggest,
-            highlights(days, totals, prevTotals, savings, byCategory, debits))
+            highlights(against.label, totals, prevTotals, savings, byCategory, debits, days), against.label)
     }
 
+    /**
+     * Spending so far this month, and where the month is heading. The projection adds the usual day-to-day spending of
+     * the last 90 days for the days still to come, so a single big payment (rent, a fee) early in the month is not
+     * multiplied across the rest of it.
+     */
     fun monthPace(everything: List<LedgerTxn>, today: LocalDate): MonthPace {
         val all = everything.filter { !it.internalTransfer }
         val month = YearMonth.from(today)
         val spent = all.filter { !it.credit && YearMonth.from(it.date) == month }.sumOf { it.amount }
         val elapsed = today.dayOfMonth
         val length = month.lengthOfMonth()
-        val projected = spent.multiply(BigDecimal(length)).divide(BigDecimal(elapsed), 2, RoundingMode.HALF_UP)
-        return MonthPace(spent, projected, elapsed, length)
+        val daysLeft = length - elapsed
+
+        val window = all.filter { !it.credit && !it.date.isAfter(today) && !it.date.isBefore(today.minusDays(89)) }
+        val firstDay = window.minOfOrNull { it.date } ?: today
+        val windowDays = (ChronoUnit.DAYS.between(firstDay, today).toInt() + 1).coerceAtLeast(1)
+        val rate = if (windowDays < 7 || window.isEmpty()) {
+            spent.divide(BigDecimal(elapsed), 2, RoundingMode.HALF_UP)
+        } else {
+            val amounts = window.map { it.amount }.sorted()
+            val median = amounts[amounts.size / 2]
+            val oneOff = maxOf(BigDecimal(5000), median.multiply(BigDecimal(5)))
+            window.filter { it.amount <= oneOff }.sumOf { it.amount }.divide(BigDecimal(windowDays), 2, RoundingMode.HALF_UP)
+        }
+        val projected = spent.add(rate.multiply(BigDecimal(daysLeft))).setScale(2, RoundingMode.HALF_UP)
+        return MonthPace(spent, projected, elapsed, length, rate)
     }
+
+    /** Payees grouped by name however the bank spells it (SWIGGY, Swiggy), shown with their most common spelling. */
+    private fun payeeBuckets(list: List<LedgerTxn>): List<Bucket> =
+        list.groupBy { LedgerOverlay.payeeKey(it.counterparty) ?: (it.counterparty?.trim()?.lowercase().orEmpty()) }
+            .map { (_, v) ->
+                val name = v.mapNotNull { it.counterparty?.trim()?.ifEmpty { null } }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                Bucket(name?.let(::prettyName) ?: "Unknown", v.sumOf { it.amount }, v.size)
+            }
+            .sortedByDescending { it.total }
 
     private fun buckets(list: List<LedgerTxn>, key: (LedgerTxn) -> String): List<Bucket> =
         list.groupBy(key).map { (k, v) -> Bucket(k, v.sumOf { it.amount }, v.size) }.sortedByDescending { it.total }
 
     private fun highlights(
-        days: Int, totals: Totals, previous: Totals, savings: Int?, byCategory: List<Bucket>, debits: List<LedgerTxn>,
+        label: String, totals: Totals, previous: Totals, savings: Int?, byCategory: List<Bucket>, debits: List<LedgerTxn>, days: Int,
     ): List<String> {
         val out = mutableListOf<String>()
         if (previous.spend.signum() > 0) {
             val change = totals.spend.subtract(previous.spend).multiply(BigDecimal(100)).divide(previous.spend, 0, RoundingMode.HALF_UP).toInt()
             out += when {
-                change == 0 -> "Spending is about the same as the previous $days days."
-                change > 0 -> "You spent $change% more than in the previous $days days."
-                else -> "You spent ${-change}% less than in the previous $days days."
+                change == 0 -> "Spending is about the same as $label."
+                change > 0 -> "You spent $change% more than in $label."
+                else -> "You spent ${-change}% less than in $label."
             }
         }
         val total = byCategory.sumOf { it.total }

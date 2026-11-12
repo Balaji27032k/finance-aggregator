@@ -54,13 +54,14 @@ fun OverviewScreen(
     onSetBudget: (Long?) -> Unit,
     onOpen: (LedgerTxn) -> Unit,
     onOpenCategory: (String) -> Unit,
+    onOpenPayee: (String) -> Unit,
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
     val today = remember { LocalDate.now(LedgerBuilder.IST) }
     val (from, to) = period.range(today)
-    val stats = remember(ledger, period) { StatsCalculator.compute(ledger, from, to) }
+    val stats = remember(ledger, period) { StatsCalculator.compute(ledger, from, to, period.previous(today)) }
     val pace = remember(ledger) { StatsCalculator.monthPace(ledger, today) }
 
     LazyColumn(
@@ -94,13 +95,8 @@ fun OverviewScreen(
         }
         item { HeroCard(stats) }
         item {
-            InfoCard("Daily spending") {
-                SpendBars(chartBars(stats.daily))
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(shortDate(stats.from), style = MaterialTheme.typography.labelSmall)
-                    Text(if (stats.days > 45) "weekly totals" else "per day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(shortDate(stats.to), style = MaterialTheme.typography.labelSmall)
-                }
+            InfoCard("Spending per " + if (stats.days > 45) "week" else "day") {
+                SpendingBars(stats.daily)
             }
         }
         if (stats.byCategory.isNotEmpty()) {
@@ -122,7 +118,7 @@ fun OverviewScreen(
             }
         }
         if (stats.topPayees.isNotEmpty()) {
-            item { TopPayeesCard("Top payees", stats.topPayees) }
+            item { TopPayeesCard("Top payees", stats.topPayees, onOpenPayee) }
         }
         item {
             InfoCard("Recent") {
@@ -175,12 +171,12 @@ internal fun InfoCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-internal fun TopPayeesCard(title: String, items: List<Bucket>) {
+internal fun TopPayeesCard(title: String, items: List<Bucket>, onOpen: ((String) -> Unit)? = null) {
     InfoCard(title) {
         val max = items.first().total.toFloat().coerceAtLeast(1f)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items.forEach { p ->
-                Column {
+                Column(if (onOpen != null && p.key != "Unknown") Modifier.clickable { onOpen(p.key) } else Modifier) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(prettyName(p.key), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         Text(rupeesWhole(p.total), fontWeight = FontWeight.SemiBold)
@@ -210,10 +206,10 @@ internal fun HeroCard(stats: Stats) {
             val change = percentChange(stats.totals.spend, stats.previous.spend)
             Text(
                 when {
-                    change == null -> "No spending in the previous ${stats.days} days to compare"
-                    change == 0 -> "Same as the previous ${stats.days} days"
-                    change > 0 -> "Up $change% from the previous ${stats.days} days"
-                    else -> "Down ${-change}% from the previous ${stats.days} days"
+                    change == null -> "Nothing spent in ${stats.previousLabel} to compare with"
+                    change == 0 -> "About the same as ${stats.previousLabel}"
+                    change > 0 -> "Up $change% from ${stats.previousLabel}"
+                    else -> "Down ${-change}% from ${stats.previousLabel}"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = onPrimary.copy(alpha = 0.85f),
@@ -244,7 +240,13 @@ internal fun HeroCard(stats: Stats) {
 @Composable
 internal fun CategoryCard(stats: Stats, onOpenCategory: (String) -> Unit) {
     val total = stats.byCategory.sumOf { it.total }
-    InfoCard("Where it went (tap to see)") {
+    InfoCard("Where it went") {
+        Text(
+            "Touch a slice for its total. Tap a name to see those transactions.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CategoryDonut(stats.byCategory) }
         Column(Modifier.padding(top = 8.dp)) {
             stats.byCategory.take(6).forEach { b ->
@@ -288,6 +290,11 @@ internal fun PaceCard(pace: MonthPace, budget: Long?, onSetBudget: (Long?) -> Un
                 modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).height(8.dp).clip(RoundedCornerShape(4.dp)),
             )
             Text("At this pace the month ends near ${rupeesWhole(pace.projected)}.")
+            Text(
+                "Based on what you have spent so far plus your usual ${rupeesWhole(pace.dailyRate)} a day for the days left. One-off big payments are not repeated.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         } else {
             val budgetValue = BigDecimal(budget)
             val used = (pace.spentSoFar.toFloat() / budget.toFloat()).coerceIn(0f, 1f)

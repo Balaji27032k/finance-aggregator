@@ -156,12 +156,67 @@ class LedgerTest {
     }
 
     @Test
+    fun oneTransactionSeenTwiceShowsTheWorstUploadStateAndEachChannel() {
+        val t = at("2026-11-10")
+        val list = build(
+            event("sms", SourceType.SMS, t, UploadStatus.SYNCED) to txn(ref = "421960362907"),
+            event("mail", SourceType.GMAIL, t + 20_000, UploadStatus.RETRY).copy(lastError = "timeout") to txn(ref = "421960362907"),
+        )
+        assertEquals(1, list.size)
+        assertEquals(StatusKind.RETRYING, list[0].status)
+        assertEquals("timeout", list[0].problem)
+        assertEquals(listOf("Email", "SMS"), list[0].parts.map { it.source })
+        assertEquals(listOf(StatusKind.RETRYING, StatusKind.DONE), list[0].parts.map { it.kind })
+    }
+
+    @Test
+    fun aServerRefusalIsAFailureButNotUnderstoodIsOnlyForReview() {
+        val refused = event("a", SourceType.SMS, 1L, UploadStatus.NEEDS_REVIEW).copy(lastError = "invalid fields: amount")
+        val unread = event("b", SourceType.SMS, 1L, UploadStatus.NEEDS_REVIEW).copy(lastError = EventPresenter.NOT_UNDERSTOOD_REASON)
+        assertEquals(StatusKind.FAILED, EventPresenter.statusKind(refused))
+        assertEquals(StatusKind.REVIEW, EventPresenter.statusKind(unread))
+    }
+
+    @Test
+    fun thisMonthIsComparedWithTheSameDaysOfLastMonth() {
+        val today = LocalDate.parse("2026-11-12")
+        val month = Period.MONTH.previous(today)
+        assertEquals(LocalDate.parse("2026-10-01"), month.from)
+        assertEquals(LocalDate.parse("2026-10-12"), month.to)
+        assertEquals("the same days last month", month.label)
+        val last = Period.LAST_MONTH.previous(today)
+        assertEquals(LocalDate.parse("2026-09-01"), last.from)
+        assertEquals(LocalDate.parse("2026-09-30"), last.to)
+        assertEquals("the previous 7 days", Period.WEEK.previous(today).label)
+    }
+
+    @Test
+    fun aBigOneOffPaymentIsNotRepeatedInTheMonthProjection() {
+        val today = LocalDate.parse("2026-11-20")
+        val list = (1..20).map { d -> ledger("d$d", false, "200", "Cafe", "2026-11-%02d".format(d)) } +
+            ledger("rent", false, "24000", "Landlord", "2026-11-03")
+        val pace = StatsCalculator.monthPace(list, today)
+        assertEquals(BigDecimal("28000"), pace.spentSoFar)
+        assertEquals(BigDecimal("30000.00"), pace.projected)
+    }
+
+    @Test
+    fun chartScalesUseRoundNumbers() {
+        assertEquals(1500f, niceCeiling(1234f), 0.001f)
+        assertEquals(10000f, niceCeiling(9999f), 0.001f)
+        assertEquals(1f, niceCeiling(0f), 0.001f)
+        assertEquals("\u20b91.5k", rupeesShort(BigDecimal("1500")))
+        assertEquals("\u20b91.2L", rupeesShort(BigDecimal("120000")))
+        assertEquals("\u20b9800", rupeesShort(BigDecimal("800")))
+    }
+
+    @Test
     fun monthPaceProjectsTheMonthEnd() {
         val today = LocalDate.parse("2026-11-10")
         val pace = StatsCalculator.monthPace(listOf(ledger("1", false, "1000", "X", "2026-11-03")), today)
         assertEquals(10, pace.daysElapsed)
         assertEquals(30, pace.daysInMonth)
-        assertEquals(BigDecimal("3000.00"), pace.projected)
+        assertEquals(BigDecimal("3500.00"), pace.projected)
     }
 
     private fun ledger(key: String, credit: Boolean, amount: String, who: String, date: String) = LedgerTxn(

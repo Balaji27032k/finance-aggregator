@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
-import { toIso } from './format';
+import { parseIso, toIso } from './format';
 
 export type PresetId = '7d' | '30d' | 'month' | 'lastmonth' | '90d' | '180d' | '365d' | 'custom';
 
@@ -36,6 +36,24 @@ export function rangeFor(preset: PresetId, now = new Date()): { from: string; to
 
 interface Ctx { range: DateRange; setPreset: (p: PresetId) => void; setCustom: (from: string, to: string) => void }
 const RangeContext = createContext<Ctx | null>(null);
+
+/** What a range is compared with: the same days of last month for "this month", the month before for "last month". */
+export function previousFor(r: DateRange): { from: string; to: string; label: string } | undefined {
+  const from = parseIso(r.from);
+  const to = parseIso(r.to);
+  const days = Math.round((to.getTime() - from.getTime()) / 86400000) + 1;
+  if (r.preset === 'month') {
+    const start = new Date(from.getFullYear(), from.getMonth() - 1, 1);
+    const length = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    const end = new Date(start.getFullYear(), start.getMonth(), Math.min(days, length));
+    return { from: toIso(start), to: toIso(end), label: 'the same days last month' };
+  }
+  if (r.preset === 'lastmonth') {
+    const start = new Date(from.getFullYear(), from.getMonth() - 1, 1);
+    return { from: toIso(start), to: toIso(new Date(from.getFullYear(), from.getMonth(), 0)), label: 'the month before' };
+  }
+  return undefined;
+}
 
 const KEY = 'finance.range';
 

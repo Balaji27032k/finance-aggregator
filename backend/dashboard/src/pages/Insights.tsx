@@ -4,7 +4,7 @@ import { CalendarClock, Lightbulb, Repeat, Zap } from 'lucide-react';
 import { api, type Bucket, type Summary, type Txn } from '../api';
 import { categoryStyle } from '../categories';
 import { cleanName, inr, inrShort, longDate, monthLabel, pctChange, shortDate } from '../format';
-import { RangePicker, useRange } from '../range';
+import { RangePicker, previousFor, useRange } from '../range';
 import { Heatmap } from '../Heatmap';
 import { Card, ChartTip, ErrorBox, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
 
@@ -12,14 +12,14 @@ const FULL_DAY: Record<string, string> = {
   Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday',
 };
 
-function highlights(s: Summary): string[] {
+function highlights(s: Summary, label: string): string[] {
   const out: string[] = [];
   const change = pctChange(s.totals.spend, s.previous.spend);
   if (change !== null && s.previous.spend > 0) {
     const pct = Math.abs(Math.round(change));
     out.push(pct === 0
-      ? `Spending is about the same as the previous ${s.range.days} days.`
-      : `You spent ${pct}% ${change > 0 ? 'more' : 'less'} than in the previous ${s.range.days} days (${inr(s.previous.spend, true)}).`);
+      ? `Spending is about the same as ${label}.`
+      : `You spent ${pct}% ${change > 0 ? 'more' : 'less'} than in ${label} (${inr(s.previous.spend, true)}).`);
   }
   const total = s.byCategory.reduce((sum, b) => sum + b.total, 0);
   if (s.byCategory.length > 0 && total > 0) {
@@ -69,7 +69,8 @@ function BucketBars({ items, color, empty = 'Nothing yet' }: { items: Bucket[]; 
 export default function Insights() {
   const { range } = useRange();
   const [open, setOpen] = useState<Txn | null>(null);
-  const summary = useAsync(() => api.summary(range.from, range.to), [range.from, range.to]);
+  const prev = previousFor(range);
+  const summary = useAsync(() => api.summary(range.from, range.to, prev), [range.from, range.to, range.preset]);
   const s = summary.data;
 
   return (
@@ -87,10 +88,10 @@ export default function Insights() {
         <div className="grid" style={{ opacity: summary.loading ? 0.6 : 1 }}>
           <Card title="Highlights">
             <div className="callouts">
-              {highlights(s).map((text) => (
+              {highlights(s, prev?.label ?? `the previous ${s.range.days} days`).map((text) => (
                 <div className="callout" key={text}><Lightbulb size={18} /><span>{text}</span></div>
               ))}
-              {highlights(s).length === 0 && <div className="empty">Not enough data in this period</div>}
+              {highlights(s, '').length === 0 && <div className="empty">Not enough data in this period</div>}
             </div>
           </Card>
 

@@ -71,7 +71,13 @@ class AdminViewModel(app: Application) : AndroidViewModel(app) {
         loginError.value = "Your session ended. Sign in again"
     }
 
-    fun loadSummary(from: LocalDate, to: LocalDate) = load(summary, "/api/admin/summary", mapOf("from" to from.toString(), "to" to to.toString()), AdminJson::summary)
+    fun loadSummary(from: LocalDate, to: LocalDate, comparison: Comparison) = load(
+        summary, "/api/admin/summary",
+        mapOf(
+            "from" to from.toString(), "to" to to.toString(),
+            "previousFrom" to comparison.from.toString(), "previousTo" to comparison.to.toString(),
+        ),
+    ) { AdminJson.summary(it, comparison.label) }
 
     fun loadHealth() = load(health, "/api/admin/health", emptyMap(), AdminJson::health)
 

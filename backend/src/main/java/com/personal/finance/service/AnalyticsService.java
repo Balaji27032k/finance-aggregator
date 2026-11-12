@@ -37,6 +37,7 @@ public class AnalyticsService {
     static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final int MAX_GROUPS = 10_000;
     private static final int TOP = 10;
+    private static final String OWN_TRANSFER = "Own transfer";
 
     private final TransactionQueryService transactions;
     private final Clock clock;
@@ -47,25 +48,34 @@ public class AnalyticsService {
     }
 
     public Summary summary(LocalDate from, LocalDate to) {
+        return summary(from, to, null, null);
+    }
+
+    /** The previous period defaults to the stretch just before the range; callers can pass another, such as the same days last month. */
+    public Summary summary(LocalDate from, LocalDate to, LocalDate previousFromParam, LocalDate previousToParam) {
         LocalDate today = LocalDate.now(clock.withZone(IST));
         int days = (int) ChronoUnit.DAYS.between(from, to) + 1;
-        LocalDate previousFrom = from.minusDays(days);
+        boolean custom = previousFromParam != null && previousToParam != null && !previousToParam.isBefore(previousFromParam);
+        LocalDate previousFrom = custom ? previousFromParam : from.minusDays(days);
+        LocalDate previousTo = custom ? previousToParam : from.minusDays(1);
         LocalDate wideFrom = earliest(previousFrom, today.minusMonths(12).withDayOfMonth(1));
         LocalDate wideTo = later(to, today);
         List<TransactionView> wide = transactions.list(
-                wideFrom.minusDays(1).atStartOfDay(IST).toInstant(), wideTo.plusDays(2).atStartOfDay(IST).toInstant(), MAX_GROUPS);
+                wideFrom.minusDays(1).atStartOfDay(IST).toInstant(), wideTo.plusDays(2).atStartOfDay(IST).toInstant(), MAX_GROUPS)
+                .stream().filter(v -> !OWN_TRANSFER.equals(v.category())).toList();
 
         List<TransactionView> inRange = between(wide, from, to);
-        List<TransactionView> before = between(wide, previousFrom, from.minusDays(1));
+        List<TransactionView> before = between(wide, previousFrom, previousTo);
         Totals totals = totals(inRange, days);
         Totals previous = totals(before, days);
         BigDecimal savings = totals.income().signum() > 0
                 ? totals.net().multiply(BigDecimal.valueOf(100)).divide(totals.income(), 1, RoundingMode.HALF_UP) : null;
 
         List<DayPoint> daily = daily(inRange, from, to);
-        return new Summary(new Range(from, to, days), totals, previous, savings, daily, monthly(wide, today),
-                buckets(inRange, Direction.DEBIT, v -> orUnknown(v.counterparty()), TOP),
-                buckets(inRange, Direction.CREDIT, v -> orUnknown(v.counterparty()), TOP),
+        return new Summary(new Range(from, to, days), new Range(previousFrom, previousTo, (int) ChronoUnit.DAYS.between(previousFrom, previousTo) + 1),
+                totals, previous, savings, daily, monthly(wide, today),
+                payeeBuckets(inRange, Direction.DEBIT, TOP),
+                payeeBuckets(inRange, Direction.CREDIT, TOP),
                 buckets(inRange, Direction.DEBIT, TransactionView::category, 20),
                 buckets(inRange, Direction.DEBIT, v -> v.paymentMode() == null ? "Other" : v.paymentMode(), 20),
                 buckets(inRange, Direction.DEBIT, v -> v.sources().isEmpty() ? "Unknown" : v.sources().get(0).bankCode(), 20),
@@ -93,6 +103,26 @@ public class AnalyticsService {
 
     private static String orUnknown(String name) {
         return name == null || name.isBlank() ? "Unknown" : name.trim();
+    }
+
+    /** Payees grouped by name however the bank spells it, shown with their most common spelling. */
+    private static List<Bucket> payeeBuckets(List<TransactionView> list, Direction d, int limit) {
+        Map<String, List<TransactionView>> groups = list.stream().filter(v -> v.direction() == d)
+                .collect(Collectors.groupingBy(v -> payeeKey(v.counterparty())));
+        return groups.values().stream().map(g -> {
+            String name = g.stream().map(v -> orUnknown(v.counterparty())).collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
+                    .entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("Unknown");
+            BigDecimal total = g.stream().map(TransactionView::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+            return new Bucket(name, total, g.size());
+        }).sorted(Comparator.comparing(Bucket::total).reversed()).limit(limit).toList();
+    }
+
+    private static String payeeKey(String name) {
+        if (name == null || name.isBlank()) {
+            return "unknown";
+        }
+        List<String> words = java.util.Arrays.stream(name.toLowerCase(Locale.ROOT).split("[^a-z0-9]+")).filter(w -> w.length() >= 3).limit(3).toList();
+        return words.isEmpty() ? name.trim().toLowerCase(Locale.ROOT) : String.join(" ", words);
     }
 
     private static BigDecimal sum(List<TransactionView> list, Direction d) {
@@ -244,13 +274,31 @@ public class AnalyticsService {
                 .sorted(Comparator.comparing(AccountBalance::asOf).reversed()).toList();
     }
 
+    /**
+     * Spending so far this month plus the usual day-to-day spending of the last 90 days for the days left, so one big
+     * payment early in the month (rent, a fee) is not multiplied across the rest of it.
+     */
     private static Projection projection(List<TransactionView> wide, LocalDate today) {
         YearMonth month = YearMonth.from(today);
-        BigDecimal spent = wide.stream().filter(v -> v.direction() == Direction.DEBIT && YearMonth.from(dateOf(v)).equals(month))
+        List<TransactionView> debits = wide.stream().filter(v -> v.direction() == Direction.DEBIT && !dateOf(v).isAfter(today)).toList();
+        BigDecimal spent = debits.stream().filter(v -> YearMonth.from(dateOf(v)).equals(month))
                 .map(TransactionView::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
         int elapsed = today.getDayOfMonth();
         int length = month.lengthOfMonth();
-        BigDecimal projected = spent.multiply(BigDecimal.valueOf(length)).divide(BigDecimal.valueOf(elapsed), 2, RoundingMode.HALF_UP);
-        return new Projection(month.toString(), spent, projected, elapsed, length);
+
+        List<TransactionView> window = debits.stream().filter(v -> !dateOf(v).isBefore(today.minusDays(89))).toList();
+        BigDecimal rate;
+        long windowDays = window.isEmpty() ? 0 : ChronoUnit.DAYS.between(window.stream().map(AnalyticsService::dateOf).min(LocalDate::compareTo).get(), today) + 1;
+        if (windowDays < 7) {
+            rate = spent.divide(BigDecimal.valueOf(elapsed), 2, RoundingMode.HALF_UP);
+        } else {
+            List<BigDecimal> amounts = window.stream().map(TransactionView::amount).sorted().toList();
+            BigDecimal median = amounts.get(amounts.size() / 2);
+            BigDecimal oneOff = BigDecimal.valueOf(5000).max(median.multiply(BigDecimal.valueOf(5)));
+            rate = window.stream().map(TransactionView::amount).filter(a -> a.compareTo(oneOff) <= 0)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add).divide(BigDecimal.valueOf(windowDays), 2, RoundingMode.HALF_UP);
+        }
+        BigDecimal projected = spent.add(rate.multiply(BigDecimal.valueOf(length - elapsed))).setScale(2, RoundingMode.HALF_UP);
+        return new Projection(month.toString(), spent, projected, elapsed, length, rate);
     }
 }

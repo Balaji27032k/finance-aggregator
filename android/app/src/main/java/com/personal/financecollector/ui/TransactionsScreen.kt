@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -84,15 +85,18 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Text(
-            (if (txn.credit) "+" else "-") + EventPresenter.rupees(txn.amount),
-            fontWeight = FontWeight.SemiBold,
-            color = when {
-                txn.internalTransfer -> MaterialTheme.colorScheme.onSurfaceVariant
-                txn.credit -> MoneyColors.income()
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                (if (txn.credit) "+" else "-") + EventPresenter.rupees(txn.amount),
+                fontWeight = FontWeight.SemiBold,
+                color = when {
+                    txn.internalTransfer -> MaterialTheme.colorScheme.onSurfaceVariant
+                    txn.credit -> MoneyColors.income()
+                    else -> MaterialTheme.colorScheme.onSurface
+                },
+            )
+            Text(timeOfDay(txn.timeMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -101,6 +105,7 @@ fun TransactionsScreen(
     ledger: List<LedgerTxn>,
     onOpen: (LedgerTxn) -> Unit,
     presetCategory: String? = null,
+    presetQuery: String? = null,
     onPresetUsed: () -> Unit = {},
     onExport: (List<LedgerTxn>) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -108,9 +113,9 @@ fun TransactionsScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var direction by rememberSaveable { mutableStateOf(Direction.ALL) }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
-    LaunchedEffect(presetCategory) {
-        if (presetCategory != null) {
-            query = ""
+    LaunchedEffect(presetCategory, presetQuery) {
+        if (presetCategory != null || presetQuery != null) {
+            query = presetQuery.orEmpty()
             direction = Direction.OUT
             category = presetCategory
             onPresetUsed()
@@ -192,9 +197,20 @@ private val timeFormat = DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Local
 fun TxnDetailSheet(
     txn: LedgerTxn,
     onDismiss: () -> Unit,
-    onSave: ((LedgerTxn, String?, String?, Boolean) -> Unit)? = null,
+    onSave: ((LedgerTxn, String?, String?, String?) -> Unit)? = null,
     onReset: ((LedgerTxn, Boolean) -> Unit)? = null,
+    onManagePayees: () -> Unit = {},
 ) {
+    var editing by remember(txn.key) { mutableStateOf(false) }
+    if (editing && onSave != null && onReset != null) {
+        TxnEditSheet(
+            txn, onSave, onReset,
+            onManagePayees = { editing = false; onDismiss(); onManagePayees() },
+            onClose = { editing = false },
+            onDone = { editing = false; onDismiss() },
+        )
+        return
+    }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier.fillMaxWidth().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 24.dp),
@@ -223,7 +239,9 @@ fun TxnDetailSheet(
                 Detail("Cloud", if (txn.uploaded) "Uploaded" else "Waiting to upload")
             }
             if (onSave != null && onReset != null && txn.eventIds.isNotEmpty()) {
-                TxnEditor(txn, onSave, onReset, onDone = onDismiss)
+                OutlinedButton(onClick = { editing = true }, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+                    Text(if (txn.edited) "Edit category or note" else "Change category or add a note")
+                }
             }
         }
     }

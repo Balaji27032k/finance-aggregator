@@ -93,7 +93,7 @@ object AdminJson {
         )
     }
 
-    fun summary(body: String): AdminSummary {
+    fun summary(body: String, previousLabel: String = "the previous period"): AdminSummary {
         val o = JSONObject(body)
         val range = o.getJSONObject("range")
         val projection = o.getJSONObject("projection")
@@ -109,6 +109,7 @@ object AdminJson {
             topPayees = o.getJSONArray("topPayees").map(::bucket).take(5),
             biggest = o.getJSONArray("largestExpenses").map(::txn),
             highlights = emptyList(),
+            previousLabel = previousLabel,
         )
         val weekday = o.getJSONArray("byWeekday").map(::bucket)
         val hours = o.getJSONArray("byHour").map(::bucket)
@@ -125,7 +126,7 @@ object AdminJson {
                 BalanceItem(it.getString("bankCode"), it.getString("accountLast4"), it.dec("balance"), Instant.parse(it.getString("asOf")))
             },
             incomeSources = o.getJSONArray("topIncomeSources").map(::bucket),
-            pace = MonthPace(projection.dec("spentSoFar"), projection.dec("projected"), projection.int("daysElapsed"), projection.int("daysInMonth")),
+            pace = MonthPace(projection.dec("spentSoFar"), projection.dec("projected"), projection.int("daysElapsed"), projection.int("daysInMonth"), projection.dec("dailyRate")),
             byMode = o.getJSONArray("byMode").map(::bucket),
             byBank = o.getJSONArray("byBank").map(::bucket),
             byWeekday = weekday,

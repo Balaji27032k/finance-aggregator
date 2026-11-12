@@ -77,6 +77,9 @@ export function PaceCard({ pace }: { pace: Projection }) {
             At this pace the month ends near <strong className="num">{inr(pace.projected, true)}</strong>.
             {!editing && <> <button className="btn" style={{ padding: '4px 10px', marginLeft: 6 }} onClick={() => { setDraft(''); setEditing(true); }}>Set a budget</button></>}
           </p>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            Spent so far plus your usual {inr(pace.dailyRate, true)} a day for the days left. One-off big payments are not repeated.
+          </p>
         </>
       )}
     </Card>

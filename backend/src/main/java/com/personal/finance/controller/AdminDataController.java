@@ -50,11 +50,16 @@ public class AdminDataController {
 
     @GetMapping("/summary")
     public Summary summary(@RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-                           @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+                           @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                           @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousFrom,
+                           @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate previousTo) {
         LocalDate end = to != null ? to : today();
         LocalDate start = from != null ? from : end.minusDays(29);
         validate(start, end);
-        return analytics.summary(start, end);
+        if (previousFrom != null && previousTo != null) {
+            validate(previousFrom, previousTo);
+        }
+        return analytics.summary(start, end, previousFrom, previousTo);
     }
 
     @GetMapping("/transactions")

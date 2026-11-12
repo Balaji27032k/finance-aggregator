@@ -53,7 +53,7 @@ object EventPresenter {
             .joinToString(" · ").ifEmpty { null }
         return EventCardData(
             title, (if (credit) "+" else "-") + rupees(t.amount), credit, details, extra, t.note,
-            statusLabel(event.uploadStatus), true, statusKind(event.uploadStatus), problem(event),
+            statusLabel(event.uploadStatus), true, statusKind(event), problem(event),
         )
     }
 
@@ -64,6 +64,14 @@ object EventPresenter {
         UploadStatus.FAILED_PERMANENTLY -> StatusKind.FAILED
         UploadStatus.NEEDS_REVIEW -> StatusKind.REVIEW
     }
+
+    /** A message the server refused is a failure; one that is merely not understood is only kept for review. */
+    fun statusKind(event: RawFinancialEventEntity): StatusKind {
+        val kind = statusKind(event.uploadStatus)
+        return if (kind == StatusKind.REVIEW && !event.lastError.isNullOrBlank() && event.lastError != NOT_UNDERSTOOD_REASON) StatusKind.FAILED else kind
+    }
+
+    const val NOT_UNDERSTOOD_REASON = "message format not recognised yet"
 
     /** The reason an upload did not go through, when there is one; it only ever names fields, never message text. */
     fun problem(event: RawFinancialEventEntity): String? =
