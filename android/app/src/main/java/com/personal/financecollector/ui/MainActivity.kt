@@ -51,7 +51,7 @@ import com.google.android.gms.common.api.ApiException
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-    private val adminViewModel: AdminViewModel by viewModels()
+    private val profileViewModel: ProfileViewModel by viewModels()
     private val askViewModel: AskViewModel by viewModels()
 
     private val smsPermission =
@@ -202,7 +202,7 @@ class MainActivity : ComponentActivity() {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Star, null) }, label = { Text("Ask AI", maxLines = 1, fontSize = 11.sp) })
-                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Person, null) }, label = { Text("Admin", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Person, null) }, label = { Text("Profile", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab >= 4, { tab = 4 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health", maxLines = 1, fontSize = 11.sp) })
                         }
                     },
@@ -227,13 +227,7 @@ class MainActivity : ComponentActivity() {
                             ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, { askViewModel.send(it); tab = 2 }, body,
                         )
                         2 -> AskScreen(askViewModel, body)
-                        3 -> AdminScreen(
-                            vm = adminViewModel,
-                            paired = health?.cloud?.paired == true,
-                            budget = budget,
-                            onSetBudget = viewModel::setBudget,
-                            modifier = body,
-                        )
+                        3 -> ProfileScreen(profileViewModel, body)
                         4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         5 -> SourcesScreen(
                             apps = apps,

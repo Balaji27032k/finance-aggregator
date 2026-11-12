@@ -6,7 +6,7 @@ import com.personal.financecollector.database.LabelSyncEntity
 import com.personal.financecollector.ui.LedgerTxn
 import com.personal.financecollector.ui.SplitPart
 
-/** Sends the user's categories and notes to the server so the dashboard and Admin show the same thing as the phone. */
+/** Sends the user's categories and notes to the server so the web dashboard shows the same thing as the phone. */
 class LabelSync(
     private val db: FinanceDatabase,
     private val api: BackendApi,
