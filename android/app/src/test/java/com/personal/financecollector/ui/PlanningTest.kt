@@ -121,6 +121,18 @@ class PlanningTest {
     }
 
     @Test
+    fun aChangedSplitIsSentAgainAndAmountsNeedAtMostTwoDecimals() {
+        val parts = listOf(SplitPart("Tea", BigDecimal("20")), SplitPart("Biscuits", BigDecimal("30")))
+        val t = txn("sp", "2026-11-04", "50", splits = parts).copy(edited = true)
+        val sent = mapOf("sp" to LabelSync.signature(t.category, null, listOf(SplitPart("Tea", BigDecimal("25")), SplitPart("Biscuits", BigDecimal("25")))))
+        assertEquals(parts, LabelSync.plan(listOf(t), sent).push.single().splits)
+        assertTrue(LabelSync.plan(listOf(t), mapOf("sp" to LabelSync.signature(t.category, null, parts))).push.isEmpty())
+        assertEquals(2, parseSplitAmounts(listOf("20.50", "30"))?.size)
+        assertNull(parseSplitAmounts(listOf("20.555", "30")))
+        assertNull(parseSplitAmounts(listOf("", "30")))
+    }
+
+    @Test
     fun onlyChangedTransactionsAreSentAndRevertedOnesAreCleared() {
         val edited = txn("e1", "2026-11-04").copy(edited = true, userCategory = "Food", category = "Food", label = "milk")
         val untouched = txn("u1", "2026-11-05")

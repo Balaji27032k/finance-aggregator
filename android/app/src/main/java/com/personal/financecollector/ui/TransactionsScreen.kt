@@ -53,6 +53,7 @@ internal fun matches(t: LedgerTxn, query: String): Boolean {
     if (query.isBlank()) return true
     val q = query.trim().lowercase()
     return listOfNotNull(t.counterparty, t.label, t.note, t.referenceNo, t.category, t.accountLast4, t.paymentMode)
+        .plus(t.splits.map { it.category })
         .any { it.lowercase().contains(q) } || t.amount.stripTrailingZeros().toPlainString().contains(q)
 }
 
@@ -201,12 +202,13 @@ fun TxnDetailSheet(
     onReset: ((LedgerTxn, Boolean) -> Unit)? = null,
     onSplit: (LedgerTxn, List<SplitPart>) -> Unit = { _, _ -> },
     onClearSplit: (LedgerTxn) -> Unit = {},
+    knownCategories: List<String> = emptyList(),
     onManagePayees: () -> Unit = {},
 ) {
     var editing by remember(txn.key) { mutableStateOf(false) }
     if (editing && onSave != null && onReset != null) {
         TxnEditSheet(
-            txn, onSave, onReset, onSplit, onClearSplit,
+            txn, onSave, onReset, onSplit, onClearSplit, knownCategories,
             onManagePayees = { editing = false; onDismiss(); onManagePayees() },
             onClose = { editing = false },
             onDone = { editing = false; onDismiss() },

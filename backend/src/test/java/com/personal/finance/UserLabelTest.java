@@ -56,6 +56,36 @@ class UserLabelTest extends AdminTestBase {
     }
 
     @Test
+    void aSplitPaymentCountsEachPartOnItsOwnAndCanBeAskedAbout() throws Exception {
+        Device device = register(mvc);
+        mvc.perform(ingest(device, event("spl-1", uniqueSourceId(), "50.00", "ZZ Chai Stall"))).andExpect(status().isOk());
+        Cookie cookie = signIn();
+        String range = "from=2026-10-01&to=2026-11-30";
+
+        mvc.perform(post("/api/v1/transactions/labels").header("Authorization", device.bearer()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"labels\":[{\"localEventId\":\"spl-1\",\"category\":\"Food & drinks\",\"label\":null,"
+                                + "\"splits\":[{\"category\":\"Zzcuppa\",\"amount\":20.00},{\"category\":\"Zzbiscuits\",\"amount\":30.00}]}]}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/admin/spend?term=zzcuppa&" + range).cookie(cookie))
+                .andExpect(jsonPath("$.total").value(20.00))
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.items[0].transaction.splits.length()").value(2));
+        mvc.perform(get("/api/admin/spend?term=zzbiscuits&" + range).cookie(cookie)).andExpect(jsonPath("$.total").value(30.00));
+        // The payee name does not count once the user has said what the money went on.
+        mvc.perform(get("/api/admin/spend?term=chai&" + range).cookie(cookie)).andExpect(jsonPath("$.count").value(0));
+        mvc.perform(get("/api/admin/transactions?category=Zzcuppa&" + range).cookie(cookie)).andExpect(jsonPath("$.total").value(1));
+
+        // Parts that do not add up to the payment are ignored.
+        mvc.perform(post("/api/v1/transactions/labels").header("Authorization", device.bearer()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"labels\":[{\"localEventId\":\"spl-1\",\"category\":null,\"label\":null,"
+                                + "\"splits\":[{\"category\":\"Zzcuppa\",\"amount\":20.00},{\"category\":\"Zzbiscuits\",\"amount\":20.00}]}]}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/spend?term=zzcuppa&" + range).cookie(cookie)).andExpect(jsonPath("$.count").value(0));
+        mvc.perform(get("/api/admin/spend?term=chai&" + range).cookie(cookie)).andExpect(jsonPath("$.total").value(50.00));
+    }
+
+    @Test
     void thePhoneTokenIsRequiredAndOversizedTextIsRejected() throws Exception {
         mvc.perform(post("/api/v1/transactions/labels").contentType(MediaType.APPLICATION_JSON).content("{\"labels\":[]}"))
                 .andExpect(status().isUnauthorized());

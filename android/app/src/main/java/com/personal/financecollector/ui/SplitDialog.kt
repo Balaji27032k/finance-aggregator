@@ -34,15 +34,21 @@ private class SplitRow(category: String, amount: String) {
     var amount by mutableStateOf(amount)
 }
 
-/** Parses split amounts; null when a row is empty or not a positive number. */
+/** Parses split amounts; null when a row is empty, not a positive number, or has more than two decimals. */
 internal fun parseSplitAmounts(texts: List<String>): List<BigDecimal>? {
     val values = texts.map { it.replace(",", "").trim().toBigDecimalOrNull() }
-    return if (values.any { it == null || it.signum() <= 0 }) null else values.filterNotNull()
+    return if (values.any { it == null || it.signum() <= 0 || it.stripTrailingZeros().scale() > 2 }) null else values.filterNotNull()
 }
 
 /** Splits one payment across several categories; the parts must add up to the full amount. */
 @Composable
-fun SplitDialog(txn: LedgerTxn, onSave: (List<SplitPart>) -> Unit, onClear: () -> Unit, onDismiss: () -> Unit) {
+fun SplitDialog(
+    txn: LedgerTxn,
+    knownCategories: List<String>,
+    onSave: (List<SplitPart>) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val rows = remember(txn.key) {
         mutableStateListOf<SplitRow>().apply {
             if (txn.splits.isNotEmpty()) txn.splits.forEach { add(SplitRow(it.category, it.amount.stripTrailingZeros().toPlainString())) }
@@ -64,7 +70,7 @@ fun SplitDialog(txn: LedgerTxn, onSave: (List<SplitPart>) -> Unit, onClear: () -
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 rows.forEachIndexed { i, row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CategoryPicker(row.category, { row.category = it }, Modifier.weight(1f))
+                        CategoryPicker(row.category, { row.category = it }, Modifier.weight(1f), knownCategories)
                         OutlinedTextField(
                             value = row.amount,
                             onValueChange = { row.amount = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
@@ -87,7 +93,12 @@ fun SplitDialog(txn: LedgerTxn, onSave: (List<SplitPart>) -> Unit, onClear: () -
                     color = if (left.signum() == 0) MoneyColors.income() else MaterialTheme.colorScheme.error,
                 )
                 Text(
-                    "Splits stay on this phone and count towards each category in your budgets and charts.",
+                    "Name a part anything, such as Tea or Biscuits, and later ask the dashboard how much went on it. Amounts can have up to two decimals.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "Splits are sent to your server along with your other corrections.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -108,16 +119,35 @@ fun SplitDialog(txn: LedgerTxn, onSave: (List<SplitPart>) -> Unit, onClear: () -
     )
 }
 
-/** A category shown as a button that opens the list of choices. */
+/** A category shown as a button that opens the list of choices, with a way to type a new one. */
 @Composable
-fun CategoryPicker(selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+fun CategoryPicker(selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier, known: List<String> = emptyList()) {
     var open by remember { mutableStateOf(false) }
+    var typing by remember { mutableStateOf(false) }
+    var typed by remember { mutableStateOf("") }
     Column(modifier) {
         OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) { Text(selected, maxLines = 1) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            (Categories.CHOICES + selected).distinct().forEach { c ->
+            (Categories.CHOICES + known + selected).distinct().forEach { c ->
                 DropdownMenuItem(text = { Text(c) }, onClick = { onSelect(c); open = false })
             }
+            DropdownMenuItem(text = { Text("Type your own...") }, onClick = { open = false; typed = ""; typing = true })
         }
+    }
+    if (typing) {
+        AlertDialog(
+            onDismissRequest = { typing = false },
+            title = { Text("Your own category") },
+            text = {
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { typed = it.take(30) },
+                    placeholder = { Text("For example: Tea") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = { TextButton(enabled = typed.isNotBlank(), onClick = { onSelect(typed.trim()); typing = false }) { Text("Use") } },
+            dismissButton = { TextButton(onClick = { typing = false }) { Text("Cancel") } },
+        )
     }
 }

@@ -4,6 +4,7 @@ import com.personal.financecollector.collector.ParsedTransaction
 import com.personal.financecollector.collector.TransactionParser
 import com.personal.financecollector.database.ParserStatus
 import com.personal.financecollector.database.RawFinancialEventEntity
+import com.personal.financecollector.ui.SplitPart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -37,7 +38,7 @@ interface UploadApi {
 }
 
 /** One correction to send: a null category and label clear an earlier one. */
-data class LabelPush(val localEventId: String, val category: String?, val label: String?)
+data class LabelPush(val localEventId: String, val category: String?, val label: String?, val splits: List<SplitPart> = emptyList())
 
 sealed interface LabelOutcome {
     /** [missing] are events the server does not have yet; they are sent again after they upload. */
@@ -101,9 +102,12 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
             val url = normalizeBaseUrl(baseUrl) ?: return@withContext LabelOutcome.Failed("backend URL is not https")
             val array = JSONArray()
             items.forEach {
+                val parts = JSONArray()
+                it.splits.forEach { s -> parts.put(JSONObject().put("category", s.category).put("amount", s.amount.toPlainString())) }
                 array.put(
                     JSONObject().put("localEventId", it.localEventId)
-                        .put("category", it.category ?: JSONObject.NULL).put("label", it.label ?: JSONObject.NULL),
+                        .put("category", it.category ?: JSONObject.NULL).put("label", it.label ?: JSONObject.NULL)
+                        .put("splits", if (it.splits.isEmpty()) JSONObject.NULL else parts),
                 )
             }
             val request = Request.Builder()

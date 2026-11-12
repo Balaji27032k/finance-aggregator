@@ -57,7 +57,9 @@ public class TransactionQueryService {
                 counterparty, pick(ordered, FinancialTransaction::getCounterpartyAccountLast4),
                 pick(ordered, FinancialTransaction::getAccountLast4), mode,
                 pick(ordered, FinancialTransaction::getReferenceNo), pick(ordered, FinancialTransaction::getBalanceAfter),
-                note, category, pick(ordered, FinancialTransaction::getUserLabel), sources);
+                note, category, pick(ordered, FinancialTransaction::getUserLabel), sources,
+                first.getDirection() == com.personal.finance.entity.Direction.DEBIT
+                        ? Splits.decode(pick(ordered, FinancialTransaction::getUserSplits), first.getAmount()) : List.of());
     }
 
     private static int rank(SourceType type) {

@@ -4,6 +4,7 @@ import com.personal.financecollector.ConfigKeys
 import com.personal.financecollector.database.FinanceDatabase
 import com.personal.financecollector.database.LabelSyncEntity
 import com.personal.financecollector.ui.LedgerTxn
+import com.personal.financecollector.ui.SplitPart
 
 /** Sends the user's categories and notes to the server so the dashboard and Admin show the same thing as the phone. */
 class LabelSync(
@@ -27,8 +28,8 @@ class LabelSync(
             when (val outcome = api.pushLabels(baseUrl, token, chunk)) {
                 is LabelOutcome.Done -> {
                     val done = chunk.filter { it.localEventId !in outcome.missing }
-                    db.planDao().upsertSync(done.filter { it.category != null || it.label != null }.map { LabelSyncEntity(it.localEventId, signature(it.category, it.label)) })
-                    db.planDao().deleteSync(done.filter { it.category == null && it.label == null }.map { it.localEventId })
+                    db.planDao().upsertSync(done.filter { it.category != null || it.label != null || it.splits.isNotEmpty() }.map { LabelSyncEntity(it.localEventId, signature(it.category, it.label, it.splits)) })
+                    db.planDao().deleteSync(done.filter { it.category == null && it.label == null && it.splits.isEmpty() }.map { it.localEventId })
                 }
                 else -> return
             }
@@ -38,14 +39,15 @@ class LabelSync(
     companion object {
         private const val CHUNK = 100
 
-        fun signature(category: String?, label: String?) = "${category.orEmpty()}\u0001${label.orEmpty()}"
+        fun signature(category: String?, label: String?, splits: List<SplitPart> = emptyList()) =
+            "${category.orEmpty()}\u0001${label.orEmpty()}\u0001${splits.joinToString(";") { "${it.category}=${it.amount.toPlainString()}" }}"
 
         /** Events the user has changed (or that are own transfers) and anything sent earlier that is no longer changed. */
         fun plan(ledger: List<LedgerTxn>, sent: Map<String, String>): Plan {
             val desired = ledger.filter { it.edited || it.internalTransfer }
-                .flatMap { t -> t.eventIds.map { id -> id to (t.category to t.label) } }.toMap()
-            val push = desired.filter { (id, v) -> sent[id] != signature(v.first, v.second) }
-                .map { (id, v) -> LabelPush(id, v.first, v.second) }
+                .flatMap { t -> t.eventIds.map { id -> id to Triple(t.category, t.label, t.splits) } }.toMap()
+            val push = desired.filter { (id, v) -> sent[id] != signature(v.first, v.second, v.third) }
+                .map { (id, v) -> LabelPush(id, v.first, v.second, v.third) }
             val clear = sent.keys.filter { it !in desired }
             return Plan(push, clear)
         }

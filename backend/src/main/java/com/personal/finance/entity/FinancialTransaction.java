@@ -86,6 +86,9 @@ public class FinancialTransaction {
     @Column(name = "user_label")
     private String userLabel;
 
+    @Column(name = "user_splits")
+    private String userSplits;
+
     protected FinancialTransaction() {
     }
 
@@ -172,6 +175,10 @@ public class FinancialTransaction {
 
     public String getUserLabel() {
         return userLabel;
+    }
+
+    public String getUserSplits() {
+        return userSplits;
     }
 
     public String getNote() {

@@ -119,7 +119,7 @@ export function TxnRow({ txn, onOpen }: { txn: Txn; onOpen: (t: Txn) => void }) 
       <CategoryAvatar category={txn.category} />
       <div className="grow">
         <div className="title">{cleanName(txn.counterparty)}</div>
-        <div className="sub">{txn.label ? `\u201c${txn.label}\u201d \u00b7 ` : ''}{txn.category} · {txn.transactionDate ? longDate(txn.transactionDate) : dateTimeIst(txn.eventTimestamp)}</div>
+        <div className="sub">{txn.label ? `\u201c${txn.label}\u201d \u00b7 ` : ''}{txn.splits.length > 0 ? `Split: ${txn.splits.map((p) => p.category).join(', ')}` : txn.category} · {txn.transactionDate ? longDate(txn.transactionDate) : dateTimeIst(txn.eventTimestamp)}</div>
       </div>
       <div className={`num ${credit ? 'income' : ''}`} style={{ fontWeight: 600 }}>
         {credit ? '+' : '-'}{inr(txn.amount)}
@@ -138,7 +138,8 @@ export function TxnDrawer({ txn, onClose }: { txn: Txn | null; onClose: () => vo
   if (!txn) return null;
   const credit = txn.direction === 'CREDIT';
   const rows: [string, ReactNode][] = [
-    ['Category', <CategoryBadge key="c" category={txn.category} />],
+    ['Category', txn.splits.length > 0 ? 'Split across categories' : <CategoryBadge key="c" category={txn.category} />],
+    ...txn.splits.map((p): [string, ReactNode] => ['\u00a0\u00a0' + p.category, inr(p.amount)]),
     ['What for', txn.label ?? '-'],
     ['Date', txn.transactionDate ? longDate(txn.transactionDate) : '-'],
     ['Received', dateTimeIst(txn.eventTimestamp) + ' IST'],

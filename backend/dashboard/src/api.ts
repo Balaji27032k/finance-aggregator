@@ -25,6 +25,16 @@ export interface Txn {
   category: string;
   label: string | null;
   sources: Source[];
+  splits: { category: string; amount: number }[];
+}
+
+export interface SpendLookup {
+  term: string;
+  from: string;
+  to: string;
+  total: number;
+  count: number;
+  items: { transaction: Txn; matched: number }[];
 }
 
 export interface Totals { income: number; spend: number; net: number; count: number; avgDailySpend: number; largestExpense: number }
@@ -141,4 +151,5 @@ export const api = {
     request<Summary>(`/api/admin/summary?${query({ from, to, previousFrom: previous?.from, previousTo: previous?.to })}`),
   transactions: (q: TxnQuery) => request<TxnPage>(`/api/admin/transactions?${query({ ...q })}`),
   health: () => request<Health>('/api/admin/health'),
+  spend: (term: string, from: string, to: string) => request<SpendLookup>(`/api/admin/spend?${query({ term, from, to })}`),
 };

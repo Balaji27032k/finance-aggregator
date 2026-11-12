@@ -59,6 +59,17 @@ export default function Transactions() {
   const key = JSON.stringify(filters);
   useEffect(() => setPage(0), [key]);
 
+  const [askText, setAskText] = useState('');
+  const [ask, setAsk] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setAsk(askText.trim()), 400);
+    return () => clearTimeout(id);
+  }, [askText]);
+  const spend = useAsync(
+    () => (ask.length >= 2 ? api.spend(ask, range.from, range.to) : Promise.resolve(null)),
+    [ask, range.from, range.to],
+  );
+
   const data = useAsync(() => api.transactions({ ...filters, page, size: PAGE }), [key, page]);
   const result = data.data;
   const pages = result ? Math.max(1, Math.ceil(result.total / PAGE)) : 1;
@@ -97,6 +108,41 @@ export default function Transactions() {
         </div>
         <RangePicker />
       </div>
+
+      <Card title="How much did I spend on..." hint="for the dates chosen above">
+        <label className="field search">
+          <Search size={16} className="muted" />
+          <input placeholder="tea, petrol, a payee or a split item" value={askText} onChange={(e) => setAskText(e.target.value)} aria-label="Spend on" />
+        </label>
+        {spend.error && <ErrorBox message={spend.error} />}
+        {spend.data && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 22, fontWeight: 700 }} className="num">{inr(spend.data.total)}</div>
+            <div className="muted">
+              {spend.data.count === 0
+                ? `Nothing matched \u201c${spend.data.term}\u201d between ${longDate(spend.data.from)} and ${longDate(spend.data.to)}`
+                : `${spend.data.count} payment${spend.data.count === 1 ? '' : 's'} between ${longDate(spend.data.from)} and ${longDate(spend.data.to)}`}
+            </div>
+            {spend.data.items.slice(0, 8).map((m) => (
+              <div className="row" key={m.transaction.groupId} role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                onClick={() => setOpen(m.transaction)} onKeyDown={(e) => e.key === 'Enter' && setOpen(m.transaction)}>
+                <div className="grow">
+                  <div className="title">{cleanName(m.transaction.counterparty)}</div>
+                  <div className="sub">
+                    {m.transaction.splits.length > 0 ? `Split of ${inr(m.transaction.amount)}` : (m.transaction.label ?? m.transaction.category)} · {m.transaction.transactionDate ? longDate(m.transaction.transactionDate) : dateTimeIst(m.transaction.eventTimestamp)}
+                  </div>
+                </div>
+                <div className="num" style={{ fontWeight: 600 }}>{inr(m.matched)}</div>
+              </div>
+            ))}
+            {spend.data.items.length > 8 && <div className="muted" style={{ marginTop: 6 }}>and {spend.data.items.length - 8} more</div>}
+          </div>
+        )}
+        <p className="muted" style={{ marginTop: 10, fontSize: 12.5 }}>
+          Matches the payee, your note or the category. For a payment you split on the phone, only the part you named counts.
+        </p>
+      </Card>
+      <div style={{ height: 12 }} />
 
       <Card>
         <div className="filters">
@@ -159,7 +205,7 @@ export default function Transactions() {
                       </div>
                     </div>
                   </td>
-                  <td className="muted">{t.category}</td>
+                  <td className="muted">{t.splits.length > 0 ? t.splits.map((p) => `${p.category} ${inr(p.amount)}`).join(' · ') : t.category}</td>
                   <td className="muted" style={{ whiteSpace: 'nowrap' }}>{t.transactionDate ? longDate(t.transactionDate) : dateTimeIst(t.eventTimestamp)}</td>
                   <td className="muted">{t.paymentMode ?? '-'}</td>
                   <td><SourceChips txn={t} /></td>

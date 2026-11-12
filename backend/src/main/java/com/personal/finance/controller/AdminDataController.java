@@ -2,6 +2,7 @@ package com.personal.finance.controller;
 
 import com.personal.finance.dto.AdminViews.Count;
 import com.personal.finance.dto.AdminViews.DataHealth;
+import com.personal.finance.dto.AdminViews.SpendLookup;
 import com.personal.finance.dto.AdminViews.TransactionPage;
 import com.personal.finance.dto.Summary;
 import com.personal.finance.dto.TransactionView;
@@ -85,12 +86,12 @@ public class AdminDataController {
                 start.minusDays(1).atStartOfDay(IST).toInstant(), end.plusDays(2).atStartOfDay(IST).toInstant(), MAX_GROUPS)
                 .stream().filter(v -> within(v, start, end)).toList();
         TreeSet<String> categories = new TreeSet<>();
-        inRange.forEach(v -> categories.add(v.category()));
+        inRange.forEach(v -> v.partsByCategory().forEach(p -> categories.add(p.category())));
 
         String needle = q == null ? "" : q.trim().toLowerCase(Locale.ROOT);
         List<TransactionView> filtered = inRange.stream()
                 .filter(v -> direction == null || v.direction() == direction)
-                .filter(v -> category == null || category.isBlank() || category.equals(v.category()))
+                .filter(v -> category == null || category.isBlank() || v.partsByCategory().stream().anyMatch(p -> category.equals(p.category())))
                 .filter(v -> source == null || source.isBlank() || v.sources().stream().anyMatch(s -> s.type().equalsIgnoreCase(source)))
                 .filter(v -> minAmount == null || v.amount().compareTo(minAmount) >= 0)
                 .filter(v -> maxAmount == null || v.amount().compareTo(maxAmount) <= 0)
@@ -105,6 +106,42 @@ public class AdminDataController {
         int fromIndex = (int) Math.min((long) Math.max(page, 0) * pageSize, filtered.size());
         List<TransactionView> items = filtered.subList(fromIndex, Math.min(fromIndex + pageSize, filtered.size()));
         return new TransactionPage(filtered.size(), Math.max(page, 0), pageSize, debit, credit, List.copyOf(categories), items);
+    }
+
+    /** How much went on one thing, for example "tea": counts the matching share of split payments, not the whole payment. */
+    @GetMapping("/spend")
+    public SpendLookup spend(@RequestParam String term,
+                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        String needle = term.trim().toLowerCase(Locale.ROOT);
+        if (needle.length() < 2 || needle.length() > 60) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Type at least two letters");
+        }
+        LocalDate end = to != null ? to : today();
+        LocalDate start = from != null ? from : end.minusDays(29);
+        validate(start, end);
+        List<SpendLookup.Match> items = transactions.list(
+                        start.minusDays(1).atStartOfDay(IST).toInstant(), end.plusDays(2).atStartOfDay(IST).toInstant(), MAX_GROUPS)
+                .stream().filter(v -> within(v, start, end))
+                .map(v -> new SpendLookup.Match(v, matchedAmount(v, needle)))
+                .filter(m -> m.matched().signum() > 0)
+                .sorted(Comparator.comparing((SpendLookup.Match m) -> m.transaction().eventTimestamp()).reversed())
+                .toList();
+        BigDecimal total = items.stream().map(SpendLookup.Match::matched).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new SpendLookup(term.trim(), start, end, total, items.size(), items);
+    }
+
+    /** For a split payment only the parts the user named count; otherwise the whole payment when its payee, note, description or category fits. */
+    static BigDecimal matchedAmount(TransactionView v, String needle) {
+        if (v.direction() != Direction.DEBIT || "Own transfer".equals(v.category())) {
+            return BigDecimal.ZERO;
+        }
+        if (!v.splits().isEmpty()) {
+            return v.splits().stream().filter(p -> contains(p.category(), needle)).map(TransactionView.Split::amount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+        boolean hit = contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.label(), needle) || contains(v.category(), needle);
+        return hit ? v.amount() : BigDecimal.ZERO;
     }
 
     @GetMapping("/health")
@@ -137,6 +174,7 @@ public class AdminDataController {
     private static boolean matches(TransactionView v, String needle) {
         return contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.label(), needle) || contains(v.referenceNo(), needle)
                 || contains(v.accountLast4(), needle) || contains(v.category(), needle)
+                || v.splits().stream().anyMatch(p -> contains(p.category(), needle))
                 || v.amount().stripTrailingZeros().toPlainString().contains(needle);
     }
 

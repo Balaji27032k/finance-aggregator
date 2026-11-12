@@ -23,8 +23,18 @@ public record TransactionView(
         String note,
         String category,
         String label,
-        List<Source> sources) {
+        List<Source> sources,
+        List<Split> splits) {
 
     public record Source(String type, String bankCode) {
+    }
+
+    /** The user's own split of a payment between categories; the parts add up to the amount. */
+    public record Split(String category, BigDecimal amount) {
+    }
+
+    /** The category and amount pairs this payment counts as in category totals. */
+    public List<Split> partsByCategory() {
+        return splits.isEmpty() ? List.of(new Split(category, amount)) : splits;
     }
 }

@@ -76,7 +76,7 @@ public class AnalyticsService {
                 totals, previous, savings, daily, monthly(wide, today),
                 payeeBuckets(inRange, Direction.DEBIT, TOP),
                 payeeBuckets(inRange, Direction.CREDIT, TOP),
-                buckets(inRange, Direction.DEBIT, TransactionView::category, 20),
+                categoryBuckets(inRange, 20),
                 buckets(inRange, Direction.DEBIT, v -> v.paymentMode() == null ? "Other" : v.paymentMode(), 20),
                 buckets(inRange, Direction.DEBIT, v -> v.sources().isEmpty() ? "Unknown" : v.sources().get(0).bankCode(), 20),
                 weekdays(inRange), hours(inRange),
@@ -166,6 +166,23 @@ public class AnalyticsService {
             }
         }
         return months.entrySet().stream().map(e -> new MonthPoint(e.getKey().toString(), e.getValue()[0], e.getValue()[1])).toList();
+    }
+
+    /** Spending per category; a split payment adds each of its parts to its own category. */
+    private static List<Bucket> categoryBuckets(List<TransactionView> list, int limit) {
+        Map<String, BigDecimal> sums = new HashMap<>();
+        Map<String, Integer> counts = new HashMap<>();
+        for (TransactionView v : list) {
+            if (v.direction() != Direction.DEBIT) {
+                continue;
+            }
+            for (TransactionView.Split part : v.partsByCategory()) {
+                sums.merge(part.category(), part.amount(), BigDecimal::add);
+                counts.merge(part.category(), 1, Integer::sum);
+            }
+        }
+        return sums.entrySet().stream().sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
+                .limit(limit).map(e -> new Bucket(e.getKey(), e.getValue(), counts.get(e.getKey()))).toList();
     }
 
     private static List<Bucket> buckets(List<TransactionView> list, Direction d, Function<TransactionView, String> key, int limit) {

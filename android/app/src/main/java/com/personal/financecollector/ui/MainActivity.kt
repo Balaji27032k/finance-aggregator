@@ -257,6 +257,7 @@ class MainActivity : ComponentActivity() {
                         TxnDetailSheet(
                             it, onDismiss = { openKey = null }, onSave = viewModel::saveLabel, onReset = viewModel::resetLabel,
                             onSplit = viewModel::saveSplit, onClearSplit = viewModel::clearSplit,
+                            knownCategories = ledger.flatMap { l -> l.categoryParts.map { p -> p.first } }.distinct(),
                             onManagePayees = { tab = 7 },
                         )
                     }

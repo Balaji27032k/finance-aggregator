@@ -36,13 +36,13 @@ public interface FinancialTransactionRepository extends JpaRepository<FinancialT
 
     List<FinancialTransaction> findByGroupIdIn(Collection<Long> groupIds);
 
-    /** Sets the user's category and description on the rows of one phone event; returns how many rows matched. */
+    /** Sets the user's category, description and split on the rows of one phone event; returns how many rows matched. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    @Query("update FinancialTransaction t set t.userCategory = :category, t.userLabel = :label "
+    @Query("update FinancialTransaction t set t.userCategory = :category, t.userLabel = :label, t.userSplits = :splits "
             + "where t.deviceId = :deviceId and t.rawEventId in "
             + "(select e.id from RawFinancialEvent e where e.deviceId = :deviceId and e.localEventId = :localId)")
     int applyLabel(@Param("deviceId") Long deviceId, @Param("localId") String localId,
-                   @Param("category") String category, @Param("label") String label);
+                   @Param("category") String category, @Param("label") String label, @Param("splits") String splits);
 
     @Query("select t.sourceType, count(t), max(t.eventTimestamp) from FinancialTransaction t group by t.sourceType")
     List<Object[]> countBySource();

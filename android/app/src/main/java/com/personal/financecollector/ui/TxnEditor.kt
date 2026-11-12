@@ -43,6 +43,7 @@ fun TxnEditSheet(
     onReset: (LedgerTxn, Boolean) -> Unit,
     onSplit: (LedgerTxn, List<SplitPart>) -> Unit,
     onClearSplit: (LedgerTxn) -> Unit,
+    knownCategories: List<String>,
     onManagePayees: () -> Unit,
     onClose: () -> Unit,
     onDone: () -> Unit,
@@ -141,6 +142,7 @@ fun TxnEditSheet(
     if (splitting) {
         SplitDialog(
             txn,
+            knownCategories,
             onSave = { onSplit(txn, it); splitting = false; onDone() },
             onClear = { onClearSplit(txn); splitting = false; onDone() },
             onDismiss = { splitting = false },

@@ -1,6 +1,7 @@
 package com.personal.finance.service;
 
 import com.personal.finance.dto.LabelItem;
+import com.personal.finance.dto.TransactionView;
 import com.personal.finance.repository.FinancialTransactionRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,7 +23,7 @@ public class LabelService {
         int updated = 0;
         List<String> missing = new ArrayList<>();
         for (LabelItem item : items) {
-            int rows = ledger.applyLabel(deviceId, item.localEventId(), clean(item.category()), clean(item.label()));
+            int rows = ledger.applyLabel(deviceId, item.localEventId(), clean(item.category()), clean(item.label()), splitsOf(item));
             if (rows == 0) {
                 missing.add(item.localEventId());
             } else {
@@ -30,6 +31,20 @@ public class LabelService {
             }
         }
         return new LabelItem.Result(updated, missing);
+    }
+
+    private static String splitsOf(LabelItem item) {
+        if (item.splits() == null) {
+            return null;
+        }
+        List<TransactionView.Split> parts = new ArrayList<>();
+        for (LabelItem.Part p : item.splits()) {
+            String category = clean(p.category());
+            if (category != null) {
+                parts.add(new TransactionView.Split(category, p.amount()));
+            }
+        }
+        return Splits.encode(parts);
     }
 
     /** Free text is stored as plain text only: control characters are dropped and blank means none. */
