@@ -74,11 +74,12 @@ fun OwnAccountsScreen(
             mine.forEach { e ->
                 val seen = detected.filter { it.last4 == e.value }.sumOf { it.count }
                 val balance = balances.firstOrNull { it.last4 == e.value }
+                val netWorthKey = balance?.key ?: "${BankBrand.forName(e.display.substringBefore(" ending "))}|${e.value}"
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).clickable { onOpenAccount(e.value) }.padding(vertical = 4.dp)) {
                         Text(e.display, fontWeight = FontWeight.Medium)
                         Text(
-                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${rupeesWhole(it.balance)}" } ?: "") + " \u203a",
+                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${rupeesWhole(it.balance)}" } ?: " \u00b7 no balance in the messages yet") + " \u203a",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -90,11 +91,9 @@ fun OwnAccountsScreen(
                             )
                         }
                     }
-                    if (balance != null) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Switch(balance.key !in netWorthExcluded, { onToggleNetWorth(balance.key, it) })
-                            Text("In net worth", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Switch(netWorthKey !in netWorthExcluded, { onToggleNetWorth(netWorthKey, it) })
+                        Text("In net worth", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { onRemove(e.accountKey) }) { Text("Remove") }
                 }
