@@ -28,6 +28,29 @@ export interface Txn {
   splits: { category: string; name: string | null; amount: number }[];
 }
 
+export interface AskTotals { total: number; count: number }
+export interface AskGroup { name: string; total: number; count: number }
+export interface AskItem { name: string; title: string; date: string; amount: number; related: boolean }
+export interface AskTurn { role: 'user' | 'assistant'; text: string }
+
+export interface AskReply {
+  answer: string;
+  aiUsed: boolean;
+  intent: string;
+  periodLabel: string;
+  from: string;
+  to: string;
+  terms: string[];
+  exact: AskTotals | null;
+  related: AskTotals | null;
+  breakdownTitle: string | null;
+  breakdown: AskGroup[];
+  items: AskItem[];
+  suggestions: string[];
+  sentToAi: string[];
+  note: string | null;
+}
+
 export interface SpendLookup {
   term: string;
   from: string;
@@ -152,4 +175,10 @@ export const api = {
   transactions: (q: TxnQuery) => request<TxnPage>(`/api/admin/transactions?${query({ ...q })}`),
   health: () => request<Health>('/api/admin/health'),
   spend: (term: string, from: string, to: string) => request<SpendLookup>(`/api/admin/spend?${query({ term, from, to })}`),
+  ask: (question: string, history: AskTurn[]) =>
+    request<AskReply>('/api/admin/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, history }),
+    }),
 };

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
-import { Activity, LayoutDashboard, LineChart, ListOrdered, LogOut, Moon, Sun, TrendingUp } from 'lucide-react';
+import { Activity, LayoutDashboard, LineChart, ListOrdered, LogOut, Moon, Sparkles, Sun, TrendingUp } from 'lucide-react';
 import { api, setUnauthorizedListener } from './api';
 import { RangeProvider } from './range';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Insights from './pages/Insights';
 import Transactions from './pages/Transactions';
+import Ask from './pages/Ask';
 import DataHealth from './pages/DataHealth';
 
 type Theme = 'dark' | 'light';
@@ -56,6 +57,7 @@ export default function App() {
             <NavLink to="/" end className="nav-link"><LayoutDashboard size={18} /><span>Overview</span></NavLink>
             <NavLink to="/insights" className="nav-link"><LineChart size={18} /><span>Insights</span></NavLink>
             <NavLink to="/transactions" className="nav-link"><ListOrdered size={18} /><span>Transactions</span></NavLink>
+            <NavLink to="/ask" className="nav-link"><Sparkles size={18} /><span>Ask AI</span></NavLink>
             <NavLink to="/data" className="nav-link"><Activity size={18} /><span>Data health</span></NavLink>
             <div className="sidebar-foot">
               <button className="nav-link nav-button" onClick={toggleTheme} aria-label="Switch theme">
@@ -72,6 +74,7 @@ export default function App() {
               <Route path="/" element={<Overview />} />
               <Route path="/insights" element={<Insights />} />
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/ask" element={<Ask />} />
               <Route path="/data" element={<DataHealth />} />
               <Route path="*" element={<Overview />} />
             </Routes>
