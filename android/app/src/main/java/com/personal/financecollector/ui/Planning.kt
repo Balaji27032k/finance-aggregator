@@ -30,10 +30,14 @@ object NetWorthCalculator {
             .sortedByDescending { it.balance }
     }
 
-    fun compute(ledger: List<LedgerTxn>, excluded: Set<String>, today: LocalDate): NetWorth {
-        val accounts = latestBalances(ledger).filter { it.key !in excluded }
+    /** [mine] limits the total to the user's own accounts (last digits); empty means every account with a known balance. */
+    fun compute(ledger: List<LedgerTxn>, excluded: Set<String>, today: LocalDate, mine: Set<String> = emptySet()): NetWorth {
+        val accounts = latestBalances(ledger).filter { it.key !in excluded && (mine.isEmpty() || it.last4 in mine) }
         val brand = AccountGrouping.brandOf(ledger)
-        val byAccount = ledger.filter { it.balanceAfter != null && it.accountLast4 != null && "${brand(it)}|${it.accountLast4}" !in excluded }
+        val byAccount = ledger.filter {
+            it.balanceAfter != null && it.accountLast4 != null && (mine.isEmpty() || it.accountLast4 in mine) &&
+                "${brand(it)}|${it.accountLast4}" !in excluded
+        }
             .groupBy { "${brand(it)}|${it.accountLast4}" }
             .mapValues { (_, v) -> v.sortedBy { it.timeMs } }
 

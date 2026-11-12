@@ -22,7 +22,8 @@ object LedgerOverlay {
         own: OwnSettings,
         splits: Map<String, List<SplitPart>> = emptyMap(),
     ): List<LedgerTxn> {
-        val accounts = detectedAccounts(base) + own.accountLast4s
+        // Once the user has listed their accounts, only those count as theirs; until then every account seen in messages does.
+        val accounts = own.accountLast4s.ifEmpty { detectedAccounts(base) }
         val names = own.names.map { words(it) }.filter { it.isNotEmpty() }
 
         val first = base.map { t ->

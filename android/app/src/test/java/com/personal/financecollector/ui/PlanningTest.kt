@@ -177,6 +177,23 @@ class PlanningTest {
     }
 
     @Test
+    fun onlyTheAccountsTheUserListedAreCountedAsTheirs() {
+        val ledger = listOf(
+            txn("a", "2026-11-10", account = "5867", bank = "SBIUPI", balance = "1000"),
+            txn("b", "2026-11-11", account = "9999", bank = "HDFC", balance = "500"),
+        )
+        assertEquals(BigDecimal("1500"), NetWorthCalculator.compute(ledger, emptySet(), today).total)
+        assertEquals(BigDecimal("1000"), NetWorthCalculator.compute(ledger, emptySet(), today, setOf("5867")).total)
+
+        // A transfer to an account that is not listed stays spending; one to a listed account is an own transfer.
+        val out = txn("t1", "2026-11-12", "300", who = "Someone", account = "5867").copy(counterpartyAccountLast4 = "9999")
+        val own = LedgerOverlay.apply(listOf(out, ledger[1]), emptyMap(), emptyMap(), OwnSettings(accountLast4s = setOf("5867")))
+        assertEquals(false, own[0].internalTransfer)
+        val bothMine = LedgerOverlay.apply(listOf(out, ledger[1]), emptyMap(), emptyMap(), OwnSettings(accountLast4s = setOf("5867", "9999")))
+        assertEquals(true, bothMine[0].internalTransfer)
+    }
+
+    @Test
     fun onlyChangedTransactionsAreSentAndRevertedOnesAreCleared() {
         val edited = txn("e1", "2026-11-04").copy(edited = true, userCategory = "Food", category = "Food", label = "milk")
         val untouched = txn("u1", "2026-11-05")

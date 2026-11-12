@@ -23,6 +23,7 @@ android/app/build/
 android/.idea/
 *.apk
 *.aab
+android/app/src/main/assets/my_accounts.txt
 
 # Frontend
 frontend/node_modules/

@@ -276,14 +276,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addOwnAccount(digits: String): Boolean {
+    fun addOwnAccount(digits: String, bank: String): Boolean {
         val value = digits.trim().uppercase()
         if (!Regex("[0-9A-Z]{3,8}").matches(value)) return false
+        val bankName = bank.trim().take(30).ifBlank { "Account" }
         viewModelScope.launch {
-            labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$value", "ACCOUNT", value, "Account ending $value", System.currentTimeMillis()))
+            labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$value", "ACCOUNT", value, "$bankName ending $value", System.currentTimeMillis()))
             kickChecks()
         }
         return true
+    }
+
+    /** Adds the accounts listed in the optional local file assets/my_accounts.txt ("Bank name,last digits" per line), once. */
+    private suspend fun seedAccounts() {
+        if (prefs.getBoolean("accounts_seeded", false)) return
+        val lines = try {
+            getApplication<Application>().assets.open("my_accounts.txt").bufferedReader().use { it.readLines() }
+        } catch (_: java.io.IOException) {
+            return
+        }
+        val existing = labelDao.ownAccounts().map { it.accountKey }.toSet()
+        for (line in lines) {
+            val bank = line.substringBefore(',').trim()
+            val digits = line.substringAfter(',', "").trim().uppercase()
+            if (bank.isEmpty() || !Regex("[0-9A-Z]{3,8}").matches(digits) || "ACCOUNT:$digits" in existing) continue
+            labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$digits", "ACCOUNT", digits, "$bank ending $digits", System.currentTimeMillis()))
+        }
+        prefs.edit().putBoolean("accounts_seeded", true).apply()
     }
 
     fun addOwnName(name: String): Boolean {
@@ -413,6 +432,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { installedApps.value = loadInstalledApps() }
+        viewModelScope.launch { seedAccounts() }
     }
 
     fun refreshSystemState() = tick.update { it + 1 }

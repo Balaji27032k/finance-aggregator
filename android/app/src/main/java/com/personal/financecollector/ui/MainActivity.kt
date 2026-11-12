@@ -213,6 +213,7 @@ class MainActivity : ComponentActivity() {
                             onSeeAll = { tab = 1 },
                             categoryLimits = categoryBudgets,
                             netWorthExcluded = netWorthExcluded,
+                            myAccounts = ownEntries.filter { it.kind == "ACCOUNT" }.map { it.value }.toSet(),
                             onOpenBudgets = { tab = 8 },
                             onOpenBills = { tab = 9 },
                             onOpenAccounts = { tab = 6 },
