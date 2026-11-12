@@ -106,7 +106,7 @@ object StatsCalculator {
             DayAmount(d, spendByDay[d] ?: BigDecimal.ZERO, incomeByDay[d] ?: BigDecimal.ZERO)
         }
         val debits = inRange.filter { !it.credit }
-        val byCategory = buckets(debits) { it.category }
+        val byCategory = categoryBuckets(debits)
         val topPayees = payeeBuckets(debits).take(5)
         val biggest = debits.sortedByDescending { it.amount }.take(3)
 
@@ -153,6 +153,15 @@ object StatsCalculator {
 
     private fun buckets(list: List<LedgerTxn>, key: (LedgerTxn) -> String): List<Bucket> =
         list.groupBy(key).map { (k, v) -> Bucket(k, v.sumOf { it.amount }, v.size) }.sortedByDescending { it.total }
+
+    /** Category totals; a split payment adds each of its parts to its own category. */
+    fun categoryBuckets(list: List<LedgerTxn>): List<Bucket> =
+        list.flatMap { it.categoryParts }.groupBy({ it.first }, { it.second })
+            .map { (k, v) -> Bucket(k, v.fold(BigDecimal.ZERO, BigDecimal::add), v.size) }.sortedByDescending { it.total }
+
+    /** What has been spent per category in one month, for budgets. */
+    fun categorySpend(everything: List<LedgerTxn>, month: YearMonth): Map<String, BigDecimal> =
+        categoryBuckets(everything.filter { !it.internalTransfer && !it.credit && YearMonth.from(it.date) == month }).associate { it.key to it.total }
 
     private fun highlights(
         label: String, totals: Totals, previous: Totals, savings: Int?, byCategory: List<Bucket>, debits: List<LedgerTxn>, days: Int,

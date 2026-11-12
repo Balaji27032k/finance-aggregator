@@ -80,6 +80,12 @@ public class FinancialTransaction {
     @Column(name = "match_basis")
     private String matchBasis;
 
+    @Column(name = "user_category")
+    private String userCategory;
+
+    @Column(name = "user_label")
+    private String userLabel;
+
     protected FinancialTransaction() {
     }
 
@@ -158,6 +164,14 @@ public class FinancialTransaction {
 
     public String getBankCode() {
         return bankCode;
+    }
+
+    public String getUserCategory() {
+        return userCategory;
+    }
+
+    public String getUserLabel() {
+        return userLabel;
     }
 
     public String getNote() {

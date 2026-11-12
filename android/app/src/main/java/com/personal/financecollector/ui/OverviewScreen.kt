@@ -56,6 +56,11 @@ fun OverviewScreen(
     onOpenCategory: (String) -> Unit,
     onOpenPayee: (String) -> Unit,
     onSeeAll: () -> Unit,
+    categoryLimits: Map<String, Long>,
+    netWorthExcluded: Set<String>,
+    onOpenBudgets: () -> Unit,
+    onOpenBills: () -> Unit,
+    onOpenAccounts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
@@ -63,6 +68,9 @@ fun OverviewScreen(
     val (from, to) = period.range(today)
     val stats = remember(ledger, period) { StatsCalculator.compute(ledger, from, to, period.previous(today)) }
     val pace = remember(ledger) { StatsCalculator.monthPace(ledger, today) }
+    val netWorth = remember(ledger, netWorthExcluded) { NetWorthCalculator.compute(ledger, netWorthExcluded, today) }
+    val budgets = remember(ledger, categoryLimits) { BudgetCalculator.statuses(ledger, categoryLimits, java.time.YearMonth.from(today)) }
+    val bills = remember(ledger) { BillDetector.detect(ledger, today) }
 
     LazyColumn(
         modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -103,6 +111,9 @@ fun OverviewScreen(
             item { CategoryCard(stats, onOpenCategory) }
         }
         item { PaceCard(pace, budget, onSetBudget) }
+        item { BudgetsCard(budgets, onOpenBudgets) }
+        item { BillsCard(bills, today, onOpenBills) }
+        item { NetWorthCard(netWorth, onOpenAccounts) }
         if (stats.highlights.isNotEmpty()) {
             item {
                 InfoCard("Insights") {

@@ -19,6 +19,8 @@ import com.personal.financecollector.collector.SmsPermission
 import com.personal.financecollector.collector.SmsSender
 import com.personal.financecollector.database.CollectionStatusEntity
 import com.personal.financecollector.database.ConnectedSourceEntity
+import com.personal.financecollector.database.CategoryBudgetEntity
+import com.personal.financecollector.database.TxnSplitEntity
 import com.personal.financecollector.database.OwnAccountEntity
 import com.personal.financecollector.database.PayeeRuleEntity
 import com.personal.financecollector.database.TransactionLabelEntity
@@ -173,11 +175,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Transactions as the user sees them: messages merged across channels, then the user's corrections applied. */
-    val ledger: StateFlow<List<LedgerTxn>> = combine(baseLedger, labelDao.observeLabels(), labelDao.observeRules(), ownEntries) { base, labels, rules, own ->
-        LedgerOverlay.apply(base, labels.associateBy { it.eventId }, rules.associate { it.payeeKey to it.category }, ownSettings(own))
+    private val planDao = db.planDao()
+    val ledger: StateFlow<List<LedgerTxn>> = combine(
+        baseLedger, labelDao.observeLabels(), labelDao.observeRules(), ownEntries, planDao.observeSplits(),
+    ) { base, labels, rules, own, splits ->
+        LedgerOverlay.apply(
+            base, labels.associateBy { it.eventId }, rules.associate { it.payeeKey to it.category }, ownSettings(own),
+            splits.groupBy({ it.eventId }, { SplitPart(it.category, java.math.BigDecimal(it.amount)) }),
+        )
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Runs the background pass: sends corrections to the server, refreshes the widget, checks budgets and bills. */
+    private fun kickChecks() = UploadScheduler.enqueueNow(getApplication())
+
+    val categoryBudgets: StateFlow<Map<String, Long>> = planDao.observeBudgets()
+        .map { list -> list.associate { it.category to it.limitRupees } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    fun setCategoryBudget(category: String, limit: Long?) {
+        viewModelScope.launch {
+            if (limit == null || limit <= 0) planDao.deleteBudget(category) else planDao.upsertBudget(CategoryBudgetEntity(category, limit))
+            kickChecks()
+        }
+    }
+
+    /** Replaces any earlier split of this payment. */
+    fun saveSplit(txn: LedgerTxn, parts: List<SplitPart>) {
+        viewModelScope.launch {
+            planDao.deleteSplits(txn.eventIds)
+            planDao.insertSplits(parts.map { TxnSplitEntity(eventId = txn.eventIds.first(), category = it.category, amount = it.amount.toPlainString()) })
+            kickChecks()
+        }
+    }
+
+    fun clearSplit(txn: LedgerTxn) {
+        viewModelScope.launch {
+            planDao.deleteSplits(txn.eventIds)
+            kickChecks()
+        }
+    }
+
+    /** Accounts left out of the net worth total, kept on this phone. */
+    val netWorthExcluded = MutableStateFlow(prefs.getStringSet("networth_excluded", emptySet()).orEmpty())
+
+    fun setIncludedInNetWorth(key: String, included: Boolean) {
+        val next = if (included) netWorthExcluded.value - key else netWorthExcluded.value + key
+        prefs.edit().putStringSet("networth_excluded", next).apply()
+        netWorthExcluded.value = next
+    }
 
     /** Accounts seen in messages, so they can be shown as "yours" without any typing. */
     val detectedAccounts: StateFlow<List<DetectedAccount>> = baseLedger.map { list ->
@@ -197,6 +244,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             val key = LedgerOverlay.payeeKey(txn.counterparty)
             if (ruleCategory != null && key != null) labelDao.upsertRule(PayeeRuleEntity(key, ruleCategory.take(30), now))
+            kickChecks()
         }
     }
 
@@ -204,11 +252,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setPayeeRule(key: String, category: String) {
-        viewModelScope.launch { labelDao.upsertRule(PayeeRuleEntity(key, category.trim().take(30), System.currentTimeMillis())) }
+        viewModelScope.launch {
+            labelDao.upsertRule(PayeeRuleEntity(key, category.trim().take(30), System.currentTimeMillis()))
+            kickChecks()
+        }
     }
 
     fun removePayeeRule(key: String) {
-        viewModelScope.launch { labelDao.deleteRule(key) }
+        viewModelScope.launch {
+            labelDao.deleteRule(key)
+            kickChecks()
+        }
     }
 
     /** Goes back to the automatic category and removes the description; a payee rule, if any, still applies. */
@@ -216,25 +270,36 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             labelDao.deleteLabels(txn.eventIds)
             if (forgetPayeeRule) LedgerOverlay.payeeKey(txn.counterparty)?.let { labelDao.deleteRule(it) }
+            planDao.deleteSplits(txn.eventIds)
+            kickChecks()
         }
     }
 
     fun addOwnAccount(digits: String): Boolean {
         val value = digits.trim().uppercase()
         if (!Regex("[0-9A-Z]{3,8}").matches(value)) return false
-        viewModelScope.launch { labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$value", "ACCOUNT", value, "Account ending $value", System.currentTimeMillis())) }
+        viewModelScope.launch {
+            labelDao.upsertOwn(OwnAccountEntity("ACCOUNT:$value", "ACCOUNT", value, "Account ending $value", System.currentTimeMillis()))
+            kickChecks()
+        }
         return true
     }
 
     fun addOwnName(name: String): Boolean {
         val value = name.trim().lowercase().replace(Regex("\\s+"), " ")
         if (value.length < 3) return false
-        viewModelScope.launch { labelDao.upsertOwn(OwnAccountEntity("NAME:$value", "NAME", value, name.trim(), System.currentTimeMillis())) }
+        viewModelScope.launch {
+            labelDao.upsertOwn(OwnAccountEntity("NAME:$value", "NAME", value, name.trim(), System.currentTimeMillis()))
+            kickChecks()
+        }
         return true
     }
 
     fun removeOwn(key: String) {
-        viewModelScope.launch { labelDao.deleteOwn(key) }
+        viewModelScope.launch {
+            labelDao.deleteOwn(key)
+            kickChecks()
+        }
     }
 
     private val systemState = tick.map { readSystemState() }

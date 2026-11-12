@@ -25,15 +25,15 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             credentials = container.credentials,
         )
         try {
-            // Keep the home-screen widget current when a message arrives while the app is closed.
+            val result = runner.run()
+            // Runs after the upload so corrections to events the server just received can be sent in the same pass.
             try {
-                com.personal.financecollector.widget.SpendWidget.recompute(applicationContext)
+                BackgroundChecks.run(applicationContext)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // The widget is optional; uploading must not depend on it.
+                // Widget, alerts and corrections are optional; uploading must not depend on them.
             }
-            val result = runner.run()
             if (result is RunResult.RetryAt) {
                 UploadScheduler.enqueueAfter(applicationContext, (result.atMillis - System.currentTimeMillis()).coerceAtLeast(0))
             }

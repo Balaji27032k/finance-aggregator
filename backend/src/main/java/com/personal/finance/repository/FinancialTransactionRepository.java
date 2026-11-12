@@ -2,6 +2,7 @@ package com.personal.finance.repository;
 
 import com.personal.finance.entity.Direction;
 import com.personal.finance.entity.FinancialTransaction;
+import com.personal.finance.entity.RawFinancialEvent;
 import com.personal.finance.entity.SourceType;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -33,6 +35,14 @@ public interface FinancialTransactionRepository extends JpaRepository<FinancialT
     List<Long> findGroupIds(@Param("from") Instant from, @Param("to") Instant to, Pageable page);
 
     List<FinancialTransaction> findByGroupIdIn(Collection<Long> groupIds);
+
+    /** Sets the user's category and description on the rows of one phone event; returns how many rows matched. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update FinancialTransaction t set t.userCategory = :category, t.userLabel = :label "
+            + "where t.deviceId = :deviceId and t.rawEventId in "
+            + "(select e.id from RawFinancialEvent e where e.deviceId = :deviceId and e.localEventId = :localId)")
+    int applyLabel(@Param("deviceId") Long deviceId, @Param("localId") String localId,
+                   @Param("category") String category, @Param("label") String label);
 
     @Query("select t.sourceType, count(t), max(t.eventTimestamp) from FinancialTransaction t group by t.sourceType")
     List<Object[]> countBySource();

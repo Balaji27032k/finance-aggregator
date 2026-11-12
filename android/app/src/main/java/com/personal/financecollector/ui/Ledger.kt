@@ -10,6 +10,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
+data class SplitPart(val category: String, val amount: BigDecimal)
+
 /** One channel's copy of a transaction, for example the SMS or the e-mail. */
 data class TxnPart(val source: String, val kind: StatusKind, val statusText: String, val capturedMs: Long, val problem: String?)
 
@@ -46,7 +48,13 @@ data class LedgerTxn(
     val problem: String? = null,
     /** The category the user picked for this one transaction, if any (a payee rule is not counted here). */
     val userCategory: String? = null,
+    /** When the user split the payment between categories; the parts add up to [amount]. Empty means one category. */
+    val splits: List<SplitPart> = emptyList(),
 ) {
+    /** The category and amount pairs this payment counts as in category totals. */
+    val categoryParts: List<Pair<String, BigDecimal>>
+        get() = if (splits.isNotEmpty()) splits.map { it.category to it.amount } else listOf(category to amount)
+
     val title: String get() = counterparty?.let(::prettyName) ?: paymentMode?.let { "$it ${if (credit) "credit" else "payment"}" } ?: if (credit) "Money received" else "Money sent"
 }
 

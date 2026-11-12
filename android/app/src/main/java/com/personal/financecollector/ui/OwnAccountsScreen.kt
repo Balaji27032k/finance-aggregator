@@ -33,6 +33,9 @@ fun OwnAccountsScreen(
     onAddAccount: (String) -> Boolean,
     onAddName: (String) -> Boolean,
     onRemove: (String) -> Unit,
+    balances: List<AccountBalance>,
+    netWorthExcluded: Set<String>,
+    onToggleNetWorth: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var digits by remember { mutableStateOf("") }
@@ -106,6 +109,24 @@ fun OwnAccountsScreen(
                     modifier = Modifier.weight(1f),
                 )
                 Button(onClick = { if (onAddName(name)) name = "" else nameError = true }) { Text("Add") }
+            }
+        }
+        Panel {
+            Text("Counted in net worth", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Net worth adds up the latest balance each account reported. Switch off an account, such as a credit card, that should not be included.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (balances.isEmpty()) Text("No balances seen yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            balances.forEach { b ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${b.bankCode} ending ${b.last4}", fontWeight = FontWeight.Medium)
+                        Text(rupeesWhole(b.balance), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.Switch(b.key !in netWorthExcluded, { onToggleNetWorth(b.key, it) })
+                }
             }
         }
         Panel {

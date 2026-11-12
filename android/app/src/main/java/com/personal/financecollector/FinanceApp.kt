@@ -64,7 +64,7 @@ object KnownApps {
 class AppContainer(context: Context) {
     val db: FinanceDatabase =
         Room.databaseBuilder(context, FinanceDatabase::class.java, FinanceDatabase.NAME)
-            .addMigrations(FinanceDatabase.MIGRATION_1_2)
+            .addMigrations(FinanceDatabase.MIGRATION_1_2, FinanceDatabase.MIGRATION_2_3)
             .build()
     val http: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder()
         .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
@@ -84,6 +84,7 @@ class FinanceApp : Application() {
         container = AppContainer(this)
         com.personal.financecollector.sync.UploadScheduler.ensurePeriodic(this)
         com.personal.financecollector.sync.BankMailScheduler.ensurePeriodic(this)
+        com.personal.financecollector.sync.ChecksScheduler.ensurePeriodic(this)
         // Only package names that are certain are seeded; other banks are chosen in Manage Sources.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // An earlier build had a self-test that listened to this app's own notifications; remove what it left behind.

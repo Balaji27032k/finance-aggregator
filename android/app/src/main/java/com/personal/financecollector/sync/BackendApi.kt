@@ -36,6 +36,16 @@ interface UploadApi {
     suspend fun uploadBatch(baseUrl: String, token: String, events: List<RawFinancialEventEntity>): BatchOutcome
 }
 
+/** One correction to send: a null category and label clear an earlier one. */
+data class LabelPush(val localEventId: String, val category: String?, val label: String?)
+
+sealed interface LabelOutcome {
+    /** [missing] are events the server does not have yet; they are sent again after they upload. */
+    data class Done(val missing: Set<String>) : LabelOutcome
+    data object Unauthorized : LabelOutcome
+    data class Failed(val reason: String) : LabelOutcome
+}
+
 class BackendApi(private val client: OkHttpClient) : UploadApi {
 
     suspend fun register(baseUrl: String, pairingCode: String, deviceName: String, appVersion: String): RegisterOutcome =
@@ -86,6 +96,34 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
             }
         }
 
+    suspend fun pushLabels(baseUrl: String, token: String, items: List<LabelPush>): LabelOutcome =
+        withContext(Dispatchers.IO) {
+            val url = normalizeBaseUrl(baseUrl) ?: return@withContext LabelOutcome.Failed("backend URL is not https")
+            val array = JSONArray()
+            items.forEach {
+                array.put(
+                    JSONObject().put("localEventId", it.localEventId)
+                        .put("category", it.category ?: JSONObject.NULL).put("label", it.label ?: JSONObject.NULL),
+                )
+            }
+            val request = Request.Builder()
+                .url("$url/api/v1/transactions/labels")
+                .header("Authorization", "Bearer $token")
+                .post(JSONObject().put("labels", array).toString().toRequestBody(JSON))
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    when (val code = response.code) {
+                        200 -> parseMissing(response.body.string())?.let { LabelOutcome.Done(it) } ?: LabelOutcome.Failed("unreadable response")
+                        401, 403 -> LabelOutcome.Unauthorized
+                        else -> LabelOutcome.Failed("HTTP $code")
+                    }
+                }
+            } catch (e: IOException) {
+                LabelOutcome.Failed(e.javaClass.simpleName)
+            }
+        }
+
     companion object {
         private val JSON = "application/json".toMediaType()
 
@@ -131,6 +169,13 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
             .put("transactionDate", t.transactionDate?.toString() ?: JSONObject.NULL)
             .put("bankCode", t.bankCode)
             .put("note", t.note ?: JSONObject.NULL)
+
+        fun parseMissing(body: String): Set<String>? = try {
+            val array = JSONObject(body).getJSONArray("missing")
+            (0 until array.length()).map { array.getString(it) }.toSet()
+        } catch (e: JSONException) {
+            null
+        }
 
         fun parseBatchResults(body: String): List<ItemResult>? = try {
             val array = JSONObject(body).getJSONArray("results")

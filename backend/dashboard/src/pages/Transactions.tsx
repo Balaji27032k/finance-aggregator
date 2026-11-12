@@ -155,7 +155,7 @@ export default function Transactions() {
                       <CategoryAvatar category={t.category} size={34} />
                       <div style={{ minWidth: 0 }}>
                         <div className="title">{cleanName(t.counterparty)}</div>
-                        {t.note && <div className="sub">{t.note}</div>}
+                        {(t.label || t.note) && <div className="sub">{t.label ? `\u201c${t.label}\u201d` : t.note}</div>}
                       </div>
                     </div>
                   </td>

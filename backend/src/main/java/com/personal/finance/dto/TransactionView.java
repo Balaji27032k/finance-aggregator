@@ -22,6 +22,7 @@ public record TransactionView(
         BigDecimal balanceAfter,
         String note,
         String category,
+        String label,
         List<Source> sources) {
 
     public record Source(String type, String bankCode) {

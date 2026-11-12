@@ -41,10 +41,13 @@ fun TxnEditSheet(
     txn: LedgerTxn,
     onSave: (LedgerTxn, String?, String?, String?) -> Unit,
     onReset: (LedgerTxn, Boolean) -> Unit,
+    onSplit: (LedgerTxn, List<SplitPart>) -> Unit,
+    onClearSplit: (LedgerTxn) -> Unit,
     onManagePayees: () -> Unit,
     onClose: () -> Unit,
     onDone: () -> Unit,
 ) {
+    var splitting by remember(txn.key) { mutableStateOf(false) }
     var label by remember(txn.key) { mutableStateOf(txn.label.orEmpty()) }
     // Starts as the category the user set before, so saving a note alone never wipes it.
     var chosen by remember(txn.key) { mutableStateOf(txn.userCategory) }
@@ -127,7 +130,20 @@ fun TxnEditSheet(
                         TextButton(onClick = { onReset(txn, true); onDone() }) { Text("Reset to automatic") }
                     }
                 }
+                if (!txn.credit) {
+                    TextButton(onClick = { splitting = true }) {
+                        Text(if (txn.splits.isNotEmpty()) "Edit split (${txn.splits.joinToString(", ") { it.category }})" else "Split across categories")
+                    }
+                }
             }
         }
+    }
+    if (splitting) {
+        SplitDialog(
+            txn,
+            onSave = { onSplit(txn, it); splitting = false; onDone() },
+            onClear = { onClearSplit(txn); splitting = false; onDone() },
+            onDismiss = { splitting = false },
+        )
     }
 }

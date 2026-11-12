@@ -143,7 +143,7 @@ export default function Overview() {
           <div className="grid cols-3">
             <PaceCard pace={s.projection} />
 
-            <Card title="Latest balances" hint="from the newest bank message">
+            <Card title="Latest balances" hint={s.balances.length > 0 ? `together ${inr(s.balances.reduce((sum, b) => sum + b.balance, 0), true)}` : 'from the newest bank message'}>
               {s.balances.length === 0 ? <div className="empty">No balances in your messages yet</div> : (
                 <div className="rows">
                   {s.balances.slice(0, 4).map((b) => (

@@ -49,13 +49,15 @@ public class TransactionQueryService {
         String counterparty = pick(ordered, FinancialTransaction::getCounterparty);
         String mode = pick(ordered, FinancialTransaction::getPaymentMode);
         String note = pick(ordered, FinancialTransaction::getNote);
+        String userCategory = pick(ordered, FinancialTransaction::getUserCategory);
+        String category = userCategory != null ? userCategory : Categorizer.categorize(first.getDirection(), counterparty, mode, note);
         return new TransactionView(
                 first.getGroupId(), first.getDirection(), first.getAmount(), first.getCurrency(),
                 pick(ordered, FinancialTransaction::getTransactionDate), earliest,
                 counterparty, pick(ordered, FinancialTransaction::getCounterpartyAccountLast4),
                 pick(ordered, FinancialTransaction::getAccountLast4), mode,
                 pick(ordered, FinancialTransaction::getReferenceNo), pick(ordered, FinancialTransaction::getBalanceAfter),
-                note, Categorizer.categorize(first.getDirection(), counterparty, mode, note), sources);
+                note, category, pick(ordered, FinancialTransaction::getUserLabel), sources);
     }
 
     private static int rank(SourceType type) {

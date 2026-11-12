@@ -63,6 +63,8 @@ data class HealthActions(
     val openSources: () -> Unit,
     val openAccounts: () -> Unit,
     val openPayees: () -> Unit,
+    val openBudgets: () -> Unit,
+    val openBills: () -> Unit,
 )
 
 internal fun formatTime(millis: Long?): String =
@@ -198,6 +200,8 @@ fun HealthScreen(
                 }
                 Button(onClick = actions.openSources, modifier = Modifier.fillMaxWidth()) { Text("Choose SMS senders and apps") }
                 OutlinedButton(onClick = actions.openPayees, modifier = Modifier.fillMaxWidth()) { Text("Payees and categories") }
+                OutlinedButton(onClick = actions.openBudgets, modifier = Modifier.fillMaxWidth()) { Text("Category budgets") }
+                OutlinedButton(onClick = actions.openBills, modifier = Modifier.fillMaxWidth()) { Text("Bills and reminders") }
                 OutlinedButton(onClick = actions.openAccounts, modifier = Modifier.fillMaxWidth()) { Text("My accounts (own transfers)") }
                 OutlinedButton(onClick = actions.openBatterySettings, modifier = Modifier.fillMaxWidth()) { Text("Battery optimization settings") }
                 OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) { Text("Delete local data") }

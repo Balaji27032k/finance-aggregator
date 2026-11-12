@@ -123,12 +123,12 @@ fun TransactionsScreen(
     }
     val today = remember { LocalDate.now(LedgerBuilder.IST) }
 
-    val categories = remember(ledger) { ledger.groupingBy { it.category }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }
+    val categories = remember(ledger) { ledger.flatMap { it.categoryParts.map { p -> p.first } }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key } }
     val shown = remember(ledger, query, direction, category) {
         ledger.filter {
             matches(it, query) &&
                 (direction == Direction.ALL || (direction == Direction.IN) == it.credit) &&
-                (category == null || it.category == category)
+                (category == null || it.category == category || it.splits.any { s -> s.category == category })
         }
     }
     val grouped = remember(shown) { shown.groupBy { it.date }.toSortedMap(compareByDescending { it }) }
@@ -199,12 +199,14 @@ fun TxnDetailSheet(
     onDismiss: () -> Unit,
     onSave: ((LedgerTxn, String?, String?, String?) -> Unit)? = null,
     onReset: ((LedgerTxn, Boolean) -> Unit)? = null,
+    onSplit: (LedgerTxn, List<SplitPart>) -> Unit = { _, _ -> },
+    onClearSplit: (LedgerTxn) -> Unit = {},
     onManagePayees: () -> Unit = {},
 ) {
     var editing by remember(txn.key) { mutableStateOf(false) }
     if (editing && onSave != null && onReset != null) {
         TxnEditSheet(
-            txn, onSave, onReset,
+            txn, onSave, onReset, onSplit, onClearSplit,
             onManagePayees = { editing = false; onDismiss(); onManagePayees() },
             onClose = { editing = false },
             onDone = { editing = false; onDismiss() },
@@ -227,6 +229,7 @@ fun TxnDetailSheet(
             txn.label?.let { Text("“$it”", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Detail("Category", txn.category + if (txn.internalTransfer) " (not counted in spending)" else "")
+                txn.splits.forEach { Detail("  Split: " + it.category, EventPresenter.rupees(it.amount)) }
                 Detail("Date", txn.date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
                 txn.paymentMode?.let { Detail("Payment mode", it) }

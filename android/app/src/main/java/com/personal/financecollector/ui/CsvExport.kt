@@ -6,7 +6,7 @@ import java.time.Instant
 object CsvExport {
     private val header = listOf(
         "Date", "Received (IST)", "Direction", "Amount", "Payee", "What for", "Category", "Own transfer",
-        "Payment mode", "Account", "Reference", "Balance after", "Note", "Seen in",
+        "Payment mode", "Account", "Reference", "Balance after", "Note", "Seen in", "Split",
     )
 
     fun build(list: List<LedgerTxn>): String {
@@ -26,6 +26,7 @@ object CsvExport {
                 t.balanceAfter?.toPlainString().orEmpty(),
                 t.note.orEmpty(),
                 t.sources.joinToString("+"),
+                t.splits.joinToString("; ") { "${it.category} ${it.amount.toPlainString()}" },
             )
         }
         return (listOf(header) + rows).joinToString("\r\n") { r -> r.joinToString(",") { cell(it) } } + "\r\n"

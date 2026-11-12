@@ -20,6 +20,7 @@ object LedgerOverlay {
         labels: Map<String, TransactionLabelEntity>,
         rules: Map<String, String>,
         own: OwnSettings,
+        splits: Map<String, List<SplitPart>> = emptyMap(),
     ): List<LedgerTxn> {
         val accounts = detectedAccounts(base) + own.accountLast4s
         val names = own.names.map { words(it) }.filter { it.isNotEmpty() }
@@ -37,10 +38,13 @@ object LedgerOverlay {
             }
             val isOwn = settled == null && looksOwn(t, accounts, names)
             val category = if (isOwn) Categories.OWN_TRANSFER else auto
+            // A split only counts while its parts still add up to the payment.
+            val parts = t.eventIds.firstNotNullOfOrNull { splits[it] }?.takeIf { p -> p.size >= 2 && p.sumOf { it.amount }.compareTo(t.amount) == 0 }.orEmpty()
             t.copy(
                 label = label,
-                edited = explicit != null || label != null || rule != null,
+                edited = explicit != null || label != null || rule != null || parts.isNotEmpty(),
                 userCategory = explicit,
+                splits = parts,
                 category = category,
                 internalTransfer = category == Categories.OWN_TRANSFER,
             ) to (settled != null)

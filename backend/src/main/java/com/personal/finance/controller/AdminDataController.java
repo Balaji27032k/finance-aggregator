@@ -135,7 +135,7 @@ public class AdminDataController {
     }
 
     private static boolean matches(TransactionView v, String needle) {
-        return contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.referenceNo(), needle)
+        return contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.label(), needle) || contains(v.referenceNo(), needle)
                 || contains(v.accountLast4(), needle) || contains(v.category(), needle)
                 || v.amount().stripTrailingZeros().toPlainString().contains(needle);
     }

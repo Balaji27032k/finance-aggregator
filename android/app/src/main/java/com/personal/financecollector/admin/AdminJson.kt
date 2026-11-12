@@ -84,6 +84,7 @@ object AdminJson {
             referenceNo = o.str("referenceNo"),
             balanceAfter = o.decOrNull("balanceAfter"),
             note = o.str("note"),
+            label = o.str("label"),
             bankCode = sources.map { it.str("bankCode") }.firstNotNullOfOrNull { it } ?: "",
             date = o.str("transactionDate")?.let(LocalDate::parse) ?: at.atZone(LedgerBuilder.IST).toLocalDate(),
             timeMs = at.toEpochMilli(),

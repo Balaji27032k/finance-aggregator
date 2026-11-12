@@ -23,6 +23,7 @@ export interface Txn {
   balanceAfter: number | null;
   note: string | null;
   category: string;
+  label: string | null;
   sources: Source[];
 }
 

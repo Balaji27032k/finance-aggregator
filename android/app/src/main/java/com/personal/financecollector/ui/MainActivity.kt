@@ -70,6 +70,23 @@ class MainActivity : ComponentActivity() {
 
     private var pendingCsv: String? = null
 
+    /** Bumped whenever the notification permission may have changed, so screens re-check it. */
+    private var notificationsVersion by mutableIntStateOf(0)
+
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            notificationsVersion++
+            if (!com.personal.financecollector.alerts.Alerts.notificationsAllowed(this)) {
+                // Denied for good: the only way left is the system settings page.
+                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+            }
+        }
+
+    private fun requestNotifications() {
+        if (Build.VERSION.SDK_INT >= 33) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        else startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+    }
+
     private val csvLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
             val text = pendingCsv
@@ -140,6 +157,8 @@ class MainActivity : ComponentActivity() {
             openSources = {},
             openAccounts = {},
             openPayees = {},
+            openBudgets = {},
+            openBills = {},
         )
         setContent {
             FinanceTheme {
@@ -158,7 +177,11 @@ class MainActivity : ComponentActivity() {
                 val pairingMessage by viewModel.pairingMessage.collectAsStateWithLifecycle()
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
-                val screenActions = actions.copy(openSources = { tab = 5 }, openAccounts = { tab = 6 }, openPayees = { tab = 7 })
+                val screenActions = actions.copy(
+                    openSources = { tab = 5 }, openAccounts = { tab = 6 }, openPayees = { tab = 7 }, openBudgets = { tab = 8 }, openBills = { tab = 9 },
+                )
+                val categoryBudgets by viewModel.categoryBudgets.collectAsStateWithLifecycle()
+                val netWorthExcluded by viewModel.netWorthExcluded.collectAsStateWithLifecycle()
                 BackHandler(enabled = tab >= 5) { tab = 4 }
                 val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
                 val detectedAccounts by viewModel.detectedAccounts.collectAsStateWithLifecycle()
@@ -187,6 +210,11 @@ class MainActivity : ComponentActivity() {
                             onOpenCategory = { linkedCategory = it; linkedQuery = null; tab = 1 },
                             onOpenPayee = { linkedQuery = it; linkedCategory = null; tab = 1 },
                             onSeeAll = { tab = 1 },
+                            categoryLimits = categoryBudgets,
+                            netWorthExcluded = netWorthExcluded,
+                            onOpenBudgets = { tab = 8 },
+                            onOpenBills = { tab = 9 },
+                            onOpenAccounts = { tab = 6 },
                             modifier = body,
                         )
                         1 -> TransactionsScreen(
@@ -216,13 +244,19 @@ class MainActivity : ComponentActivity() {
                             onAddAccount = viewModel::addOwnAccount,
                             onAddName = viewModel::addOwnName,
                             onRemove = viewModel::removeOwn,
+                            balances = NetWorthCalculator.latestBalances(ledger),
+                            netWorthExcluded = netWorthExcluded,
+                            onToggleNetWorth = viewModel::setIncludedInNetWorth,
                             modifier = body,
                         )
-                        else -> PayeesScreen(ledger, payeeRules, viewModel::setPayeeRule, viewModel::removePayeeRule, body)
+                        7 -> PayeesScreen(ledger, payeeRules, viewModel::setPayeeRule, viewModel::removePayeeRule, body)
+                        8 -> BudgetsScreen(ledger, categoryBudgets, viewModel::setCategoryBudget, ::requestNotifications, notificationsVersion, body)
+                        else -> BillsScreen(ledger, ::requestNotifications, notificationsVersion, body)
                     }
                     ledger.firstOrNull { it.key == openKey }?.let {
                         TxnDetailSheet(
                             it, onDismiss = { openKey = null }, onSave = viewModel::saveLabel, onReset = viewModel::resetLabel,
+                            onSplit = viewModel::saveSplit, onClearSplit = viewModel::clearSplit,
                             onManagePayees = { tab = 7 },
                         )
                     }
@@ -233,6 +267,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        notificationsVersion++
         viewModel.refreshSystemState()
         viewModel.ensureSmsScan()
     }
