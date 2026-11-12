@@ -37,6 +37,7 @@ fun OwnAccountsScreen(
     onRemove: (String) -> Unit,
     onOpenAccount: (String) -> Unit,
     balances: List<AccountBalance>,
+    aliases: Map<String, List<Alias>>,
     netWorthExcluded: Set<String>,
     onToggleNetWorth: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -81,6 +82,13 @@ fun OwnAccountsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        aliases[e.value]?.takeIf { it.isNotEmpty() }?.let { list ->
+                            Text(
+                                "Also shows up as " + list.joinToString(", ") { aliasText(it) } + ", counted here",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     if (balance != null) {
                         Column(horizontalAlignment = Alignment.End) {
@@ -174,6 +182,12 @@ fun OwnAccountsScreen(
         }
     }
 }
+
+private fun aliasText(a: Alias): String = when (a.mode) {
+    "CARD" -> "card ending ${a.instrument}"
+    "ATM" -> "ATM ending ${a.instrument}"
+    else -> "ending ${a.instrument}"
+} + " (${a.count})"
 
 @Composable
 private fun RemovableRow(text: String, onRemove: () -> Unit) {

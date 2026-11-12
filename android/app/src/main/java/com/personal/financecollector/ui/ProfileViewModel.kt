@@ -5,9 +5,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.personal.financecollector.ConfigKeys
 import com.personal.financecollector.FinanceApp
+import com.personal.financecollector.profile.MarketRates
 import com.personal.financecollector.profile.MoneyProfile
 import com.personal.financecollector.profile.ProfileApi
 import com.personal.financecollector.profile.ProfileOutcome
+import com.personal.financecollector.profile.RatesOutcome
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -21,6 +23,9 @@ data class ProfileState(
     val dirty: Boolean = false,
     val message: String? = null,
     val error: String? = null,
+    val rates: MarketRates? = null,
+    val ratesBusy: Boolean = false,
+    val ratesNote: String? = null,
 )
 
 /** The person's details. The server holds the saved copy; edits stay here until Save. */
@@ -55,6 +60,40 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
                 is ProfileOutcome.Failed -> _state.update { it.copy(loading = false, error = "Could not load your profile: ${outcome.reason}.") }
             }
         }
+    }
+
+    /** Shows the rates the server already holds; nothing is looked up. */
+    fun showSavedRates() {
+        if (_state.value.rates != null || _state.value.ratesBusy) return
+        loadRates(refresh = false)
+    }
+
+    /** Asks the server to look the rates up on the web right now. */
+    fun fetchRates() {
+        if (!_state.value.ratesBusy) loadRates(refresh = true)
+    }
+
+    private fun loadRates(refresh: Boolean) {
+        _state.update { it.copy(ratesBusy = true, ratesNote = null) }
+        viewModelScope.launch {
+            val link = connection()
+            if (link == null) {
+                _state.update { it.copy(ratesBusy = false, ratesNote = "Pair this phone with the server first (Health tab).") }
+                return@launch
+            }
+            when (val outcome = api.rates(link.first, link.second, refresh)) {
+                is RatesOutcome.Ok -> _state.update { it.copy(rates = outcome.rates, ratesBusy = false, ratesNote = outcome.rates.message) }
+                RatesOutcome.Unauthorized -> _state.update { it.copy(ratesBusy = false, ratesNote = "This phone is no longer paired. Pair it again in the Health tab.") }
+                is RatesOutcome.Failed -> _state.update { it.copy(ratesBusy = false, ratesNote = "Could not get rates: ${outcome.reason}.") }
+            }
+        }
+    }
+
+    /** Copies the found rates into this person's assumptions; they still need to tap Save. */
+    fun useFetchedRates() {
+        val found = _state.value.rates ?: return
+        edit { it.copy(rates = found.toAssumptions(it.rates)) }
+        _state.update { it.copy(ratesNote = "Applied to your assumptions below. Tap Save to keep them.") }
     }
 
     fun edit(change: (MoneyProfile) -> MoneyProfile) {

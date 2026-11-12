@@ -68,7 +68,8 @@ private fun NumberField(label: String, value: Long?, onValue: (Long?) -> Unit, m
 
 @Composable
 private fun DecimalField(label: String, value: Double?, hint: String, onValue: (Double?) -> Unit, modifier: Modifier = Modifier) {
-    var text by remember { mutableStateOf(value?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }.orEmpty()) }
+    var text by remember { mutableStateOf(rateText(value)) }
+    LaunchedEffect(value) { if (text.toDoubleOrNull() != value) text = rateText(value) }
     OutlinedTextField(
         value = text,
         onValueChange = { raw ->
@@ -84,6 +85,8 @@ private fun DecimalField(label: String, value: Double?, hint: String, onValue: (
         modifier = modifier.fillMaxWidth(),
     )
 }
+
+private fun rateText(value: Double?) = value?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() }.orEmpty()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -118,11 +121,27 @@ private fun ListRow(title: String, detail: String, onEdit: () -> Unit, onRemove:
 
 private fun money(value: Long?) = value?.let { rupeesWhole(BigDecimal(it)) } ?: "not set"
 
+/** One of the person's accounts with the balance its latest message reported. */
+data class AccountLine(val title: String, val balance: BigDecimal?, val asOfMs: Long?)
+
+/** The listed accounts with their balances; until accounts are listed, every account seen in messages. */
+fun accountLines(entries: List<com.personal.financecollector.database.OwnAccountEntity>, balances: List<AccountBalance>): List<AccountLine> {
+    val mine = entries.filter { it.kind == "ACCOUNT" }
+    if (mine.isEmpty()) return balances.map { AccountLine("${it.bankCode} ending ${it.last4}", it.balance, it.asOfMs) }
+    return mine.map { e ->
+        val b = balances.firstOrNull { it.last4 == e.value }
+        AccountLine(e.display, b?.balance, b?.asOfMs)
+    }
+}
+
 @Composable
-fun ProfileScreen(vm: ProfileViewModel, modifier: Modifier = Modifier) {
+fun ProfileScreen(vm: ProfileViewModel, accounts: List<AccountLine>, onManageAccounts: () -> Unit, modifier: Modifier = Modifier) {
     val state by vm.state.collectAsStateWithLifecycle()
     val p = state.profile
-    LaunchedEffect(Unit) { vm.load() }
+    LaunchedEffect(Unit) {
+        vm.load()
+        vm.showSavedRates()
+    }
     var goalDialog by remember { mutableStateOf<Pair<Int, ProfileGoal?>?>(null) }
     var holdingDialog by remember { mutableStateOf<Pair<Int, ProfileHolding?>?>(null) }
     var loanDialog by remember { mutableStateOf<Pair<Int, ProfileLoan?>?>(null) }
@@ -146,6 +165,34 @@ fun ProfileScreen(vm: ProfileViewModel, modifier: Modifier = Modifier) {
         if (state.loading) Text("Loading your profile...", color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         state.message?.let { Text(it, color = MoneyColors.income()) }
+
+        Panel {
+            Text("Your accounts", style = MaterialTheme.typography.titleMedium)
+            if (accounts.isEmpty()) {
+                Text("No account balances seen yet. They come from the balance in your bank messages.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            accounts.forEach { a ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(a.title, fontWeight = FontWeight.Medium)
+                        Text(
+                            a.asOfMs?.let { "as of " + shortDate(java.time.Instant.ofEpochMilli(it).atZone(LedgerBuilder.IST).toLocalDate()) } ?: "no balance in the messages yet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(a.balance?.let { rupeesWhole(it) } ?: "-", fontWeight = FontWeight.SemiBold)
+                }
+            }
+            val total = accounts.mapNotNull { it.balance }.fold(BigDecimal.ZERO, BigDecimal::add)
+            if (accounts.any { it.balance != null }) StatRow("Total across accounts", rupeesWhole(total))
+            Text(
+                "Balances are the last one each bank reported by message, so they can be a little behind. Card and ATM payments count towards the account they come from.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = onManageAccounts) { Text("Manage my accounts") }
+        }
 
         Panel {
             Text("About you", style = MaterialTheme.typography.titleMedium)
@@ -219,6 +266,41 @@ fun ProfileScreen(vm: ProfileViewModel, modifier: Modifier = Modifier) {
                 )
             }
             if (p.loans.size < 8) TextButton(onClick = { loanDialog = p.loans.size to null }) { Text("Add a loan") }
+        }
+
+        Panel {
+            Text("Latest market rates", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Looked up on the web for each kind of investment. Anything that could not be confirmed on a page is left out, never guessed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(onClick = vm::fetchRates, enabled = !state.ratesBusy, modifier = Modifier.fillMaxWidth()) {
+                Text(if (state.ratesBusy) "Looking up the web... this can take a minute" else "Fetch latest rates")
+            }
+            state.ratesNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            val found = state.rates
+            if (found != null && found.items.isNotEmpty()) {
+                found.fetchedAt?.let { Text("Fetched $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                found.items.forEach { r ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(r.label, fontWeight = FontWeight.Medium)
+                            val detail = listOfNotNull(r.asOf?.let { "as of $it" }, r.note).joinToString(" \u00b7 ")
+                            if (detail.isNotBlank()) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text("${r.percent.stripTrailingZeros().toPlainString()}%", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (found.sources.isNotEmpty()) {
+                    Text(
+                        "Sources: " + found.sources.take(6).joinToString(", ") { s -> s.title.ifBlank { s.url } },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = vm::useFetchedRates) { Text("Use these as my assumptions") }
+            }
         }
 
         Panel {

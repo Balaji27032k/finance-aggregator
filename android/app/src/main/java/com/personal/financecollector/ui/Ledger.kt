@@ -51,6 +51,8 @@ data class LedgerTxn(
     val userCategory: String? = null,
     /** When the user split the payment between categories; the parts add up to [amount]. Empty means one category. */
     val splits: List<SplitPart> = emptyList(),
+    /** When a card or ATM number in the message was tied to one of the user's accounts, the digits the message actually showed. */
+    val instrumentLast4: String? = null,
 ) {
     /** The category and amount pairs this payment counts as in category totals. */
     val categoryParts: List<Pair<String, BigDecimal>>

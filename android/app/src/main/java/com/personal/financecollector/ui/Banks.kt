@@ -5,13 +5,16 @@ object BankBrand {
     fun known(code: String): String? {
         val c = code.trim().uppercase()
         return when {
-            c.startsWith("SBI") || c == "CBSSBI" || c == "ATMSBI" || c == "SBYONO" -> "SBI"
-            c == "CSBBNK" || c == "CSB" -> "CSB Bank"
-            c == "INDBNK" || c == "INDIAN BANK" -> "Indian Bank"
+            c.startsWith("SBI") || c == "CBSSBI" || c == "ATMSBI" || c == "SBYONO" || "STATE BANK" in c -> "SBI"
+            c == "CSBBNK" || c.startsWith("CSB") || "CATHOLIC SYRIAN" in c -> "CSB Bank"
+            c == "INDBNK" || c.startsWith("INDIAN BANK") || c == "IND BANK" -> "Indian Bank"
             c.startsWith("ICICI") -> "ICICI"
             else -> null
         }
     }
+
+    /** The bank for a name the user typed ("CSB", "Indian Bank"), or the text itself when it is not one we know. */
+    fun forName(name: String): String = known(name) ?: name.trim()
 }
 
 object AccountGrouping {

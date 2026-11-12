@@ -2,8 +2,15 @@ package com.personal.financecollector.ui
 
 import com.personal.financecollector.database.TransactionLabelEntity
 
-/** The user's own account numbers (last digits) and the names their accounts appear under, besides the ones seen in messages. */
-data class OwnSettings(val accountLast4s: Set<String> = emptySet(), val names: Set<String> = emptySet())
+/**
+ * The user's own account numbers (last digits) and the names their accounts appear under, besides the ones seen in messages.
+ * [accountBrands] says which bank each listed account belongs to, so card digits from that bank can be tied to it.
+ */
+data class OwnSettings(
+    val accountLast4s: Set<String> = emptySet(),
+    val names: Set<String> = emptySet(),
+    val accountBrands: Map<String, String> = emptyMap(),
+)
 
 /** Applies the user's corrections and own-account knowledge on top of what the messages say. */
 object LedgerOverlay {
@@ -15,13 +22,30 @@ object LedgerOverlay {
 
     fun detectedAccounts(base: List<LedgerTxn>): Set<String> = base.mapNotNull { it.accountLast4 }.toSet()
 
+    /**
+     * A card number in a bank's message is not an account. When the user listed exactly one account at that bank, the card and ATM
+     * digits are tied to it (the original digits stay in [LedgerTxn.instrumentLast4]); with several accounts there is no way to tell.
+     */
+    private fun tieCardsToAccounts(rows: List<LedgerTxn>, own: OwnSettings): List<LedgerTxn> {
+        if (own.accountBrands.isEmpty()) return rows
+        val brandOf = AccountGrouping.brandOf(rows)
+        val accountsByBrand = own.accountBrands.entries.groupBy({ it.value }, { it.key })
+        return rows.map { t ->
+            val digits = t.accountLast4 ?: return@map t
+            if (digits in own.accountBrands) return@map t
+            val target = accountsByBrand[brandOf(t)]?.singleOrNull() ?: return@map t
+            t.copy(accountLast4 = target, instrumentLast4 = digits)
+        }
+    }
+
     fun apply(
-        base: List<LedgerTxn>,
+        raw: List<LedgerTxn>,
         labels: Map<String, TransactionLabelEntity>,
         rules: Map<String, String>,
         own: OwnSettings,
         splits: Map<String, List<SplitPart>> = emptyMap(),
     ): List<LedgerTxn> {
+        val base = tieCardsToAccounts(raw, own)
         // Once the user has listed their accounts, only those count as theirs; until then every account seen in messages does.
         val accounts = own.accountLast4s.ifEmpty { detectedAccounts(base) }
         val names = own.names.map { words(it) }.filter { it.isNotEmpty() }

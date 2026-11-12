@@ -277,17 +277,21 @@ public class AnalyticsService {
                 .sorted(Comparator.comparing(DayPoint::spend).reversed()).limit(5).toList();
     }
 
+    /**
+     * The latest balance per account. A card number in a message is not an account, so card payments are left out when picking
+     * the account's identity, and one bank's different sender names count as one bank.
+     */
     private static List<AccountBalance> balances(List<TransactionView> wide) {
         Map<String, TransactionView> latest = new HashMap<>();
         for (TransactionView v : wide) {
-            if (v.balanceAfter() == null || v.accountLast4() == null || v.sources().isEmpty()) {
+            if (v.balanceAfter() == null || v.accountLast4() == null || v.sources().isEmpty() || "CARD".equalsIgnoreCase(v.paymentMode())) {
                 continue;
             }
-            String key = v.sources().get(0).bankCode() + "|" + v.accountLast4();
+            String key = BankBrand.of(v.sources().get(0).bankCode()) + "|" + v.accountLast4();
             latest.merge(key, v, (a, b) -> b.eventTimestamp().isAfter(a.eventTimestamp()) ? b : a);
         }
         return latest.values().stream()
-                .map(v -> new AccountBalance(v.sources().get(0).bankCode(), v.accountLast4(), v.balanceAfter(), v.eventTimestamp()))
+                .map(v -> new AccountBalance(BankBrand.of(v.sources().get(0).bankCode()), v.accountLast4(), v.balanceAfter(), v.eventTimestamp()))
                 .sorted(Comparator.comparing(AccountBalance::asOf).reversed()).toList();
     }
 

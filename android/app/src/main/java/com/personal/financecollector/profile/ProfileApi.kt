@@ -15,10 +15,36 @@ sealed interface ProfileOutcome {
     data class Failed(val reason: String) : ProfileOutcome
 }
 
+sealed interface RatesOutcome {
+    data class Ok(val rates: MarketRates) : RatesOutcome
+    data object Unauthorized : RatesOutcome
+    data class Failed(val reason: String) : RatesOutcome
+}
+
 /** Reads and saves the person's profile on the server; the server is the single copy. */
 class ProfileApi(private val client: OkHttpClient) {
 
     private val json = "application/json".toMediaType()
+
+    /** The saved rates, or (with [refresh]) a new web lookup, which can take a minute. */
+    suspend fun rates(baseUrl: String, token: String, refresh: Boolean): RatesOutcome = withContext(Dispatchers.IO) {
+        val url = BackendApi.normalizeBaseUrl(baseUrl) ?: return@withContext RatesOutcome.Failed("the server address is not https")
+        val builder = Request.Builder().header("Authorization", "Bearer $token")
+        val request = if (refresh) builder.url("$url/api/v1/rates/refresh").post("".toRequestBody(json)).build() else builder.url("$url/api/v1/rates").get().build()
+        val patient = client.newBuilder().readTimeout(120, java.util.concurrent.TimeUnit.SECONDS).callTimeout(130, java.util.concurrent.TimeUnit.SECONDS).build()
+        try {
+            patient.newCall(request).execute().use { response ->
+                when (val code = response.code) {
+                    200 -> RatesJson.parse(response.body.string())?.let { RatesOutcome.Ok(it) } ?: RatesOutcome.Failed("unreadable answer")
+                    401, 403 -> RatesOutcome.Unauthorized
+                    429 -> RatesOutcome.Failed("too many requests, wait a minute")
+                    else -> RatesOutcome.Failed("HTTP $code")
+                }
+            }
+        } catch (e: IOException) {
+            RatesOutcome.Failed("could not reach the server (${e.javaClass.simpleName})")
+        }
+    }
 
     suspend fun get(baseUrl: String, token: String): ProfileOutcome = call(baseUrl, token) { it.get() }
 

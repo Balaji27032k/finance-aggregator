@@ -189,6 +189,7 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = tab >= 5) { tab = 4 }
                 val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
                 val detectedAccounts by viewModel.detectedAccounts.collectAsStateWithLifecycle()
+                val accountAliases by viewModel.accountAliases.collectAsStateWithLifecycle()
                 // Keep the home-screen widget in step with what the app is showing.
                 LaunchedEffect(ledger, budget) {
                     com.personal.financecollector.widget.SpendWidget.save(
@@ -227,7 +228,7 @@ class MainActivity : ComponentActivity() {
                             ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, { askViewModel.send(it); tab = 2 }, body,
                         )
                         2 -> AskScreen(askViewModel, body)
-                        3 -> ProfileScreen(profileViewModel, body)
+                        3 -> ProfileScreen(profileViewModel, accountLines(ownEntries, NetWorthCalculator.latestBalances(ledger)), { tab = 6 }, body)
                         4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         5 -> SourcesScreen(
                             apps = apps,
@@ -246,6 +247,7 @@ class MainActivity : ComponentActivity() {
                             onRemove = viewModel::removeOwn,
                             onOpenAccount = { linkedAccount = it; linkedCategory = null; linkedQuery = null; tab = 1 },
                             balances = NetWorthCalculator.latestBalances(ledger),
+                            aliases = accountAliases,
                             netWorthExcluded = netWorthExcluded,
                             onToggleNetWorth = viewModel::setIncludedInNetWorth,
                             modifier = body,

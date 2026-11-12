@@ -58,9 +58,13 @@ private const val LEDGER_EVENTS = 6000
 
 data class DetectedAccount(val bankCode: String, val last4: String, val count: Int)
 
+/** Digits shown in messages (a card, an ATM transaction) that belong to one of the user's accounts. */
+data class Alias(val instrument: String, val mode: String?, val count: Int)
+
 fun ownSettings(entries: List<OwnAccountEntity>) = OwnSettings(
     accountLast4s = entries.filter { it.kind == "ACCOUNT" }.map { it.value }.toSet(),
     names = entries.filter { it.kind == "NAME" }.map { it.value }.toSet(),
+    accountBrands = entries.filter { it.kind == "ACCOUNT" }.associate { it.value to BankBrand.forName(it.display.substringBefore(" ending ")) },
 )
 
 data class SmsScanUi(
@@ -227,11 +231,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Accounts seen in messages, so they can be shown as "yours" without any typing. */
-    val detectedAccounts: StateFlow<List<DetectedAccount>> = baseLedger.map { list ->
+    val detectedAccounts: StateFlow<List<DetectedAccount>> = ledger.map { list ->
         val brand = AccountGrouping.brandOf(list)
         list.filter { it.accountLast4 != null }.groupBy { brand(it) to it.accountLast4!! }
             .map { (k, v) -> DetectedAccount(k.first, k.second, v.size) }.sortedByDescending { it.count }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** For each of the user's accounts, the card or ATM digits that were tied to it and how often each showed up. */
+    val accountAliases: StateFlow<Map<String, List<Alias>>> = ledger.map { list ->
+        list.filter { it.instrumentLast4 != null && it.accountLast4 != null }.groupBy { it.accountLast4!! }.mapValues { (_, v) ->
+            v.groupBy { it.instrumentLast4!! to it.paymentMode }.map { (k, rows) -> Alias(k.first, k.second, rows.size) }.sortedByDescending { it.count }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     /** Saves what the user says this transaction was; [category] null keeps the automatic one, [ruleCategory] applies to the whole payee. */
     fun saveLabel(txn: LedgerTxn, category: String?, label: String?, ruleCategory: String?) {

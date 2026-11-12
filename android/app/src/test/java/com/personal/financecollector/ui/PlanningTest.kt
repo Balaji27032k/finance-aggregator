@@ -194,6 +194,39 @@ class PlanningTest {
     }
 
     @Test
+    fun cardAndAtmDigitsAreTiedToTheOnlyAccountOfThatBank() {
+        val rows = listOf(
+            txn("i1", "2026-11-05", account = "8991", bank = "INDBNK", balance = "1000"),
+            txn("i2", "2026-11-09", account = "4219", bank = "INDBNK", balance = "900").copy(paymentMode = "CARD"),
+            txn("c1", "2026-11-04", account = "0001", bank = "CSBBNK", balance = "500"),
+            txn("c2", "2026-11-10", account = "5418", bank = "CSBBNK", balance = "450"),
+        )
+        val own = OwnSettings(accountLast4s = setOf("8991", "0001"), accountBrands = mapOf("8991" to "Indian Bank", "0001" to "CSB Bank"))
+        val out = LedgerOverlay.apply(rows, emptyMap(), emptyMap(), own)
+        assertEquals("8991", out[1].accountLast4)
+        assertEquals("4219", out[1].instrumentLast4)
+        assertEquals("0001", out[3].accountLast4)
+        assertNull(out[0].instrumentLast4)
+        val nw = NetWorthCalculator.compute(out, emptySet(), today, own.accountLast4s)
+        assertEquals(2, nw.accounts.size)
+        // The newest balance for each account wins, whichever kind of message carried it.
+        assertEquals(BigDecimal("1350"), nw.total)
+    }
+
+    @Test
+    fun digitsAreLeftAloneWhenTheBankHasSeveralListedAccountsOrNone() {
+        val card = txn("k", "2026-11-09", account = "9999", bank = "SBIUPI")
+        val two = OwnSettings(accountLast4s = setOf("1111", "2222"), accountBrands = mapOf("1111" to "SBI", "2222" to "SBI"))
+        assertEquals("9999", LedgerOverlay.apply(listOf(card), emptyMap(), emptyMap(), two)[0].accountLast4)
+        val other = OwnSettings(accountLast4s = setOf("0001"), accountBrands = mapOf("0001" to "CSB Bank"))
+        assertEquals("9999", LedgerOverlay.apply(listOf(card), emptyMap(), emptyMap(), other)[0].accountLast4)
+        assertEquals("CSB Bank", BankBrand.forName("CSB"))
+        assertEquals("Indian Bank", BankBrand.forName("Indian Bank"))
+        assertEquals("SBI", BankBrand.forName("State Bank of India"))
+        assertEquals("HDFC", BankBrand.forName("HDFC"))
+    }
+
+    @Test
     fun onlyChangedTransactionsAreSentAndRevertedOnesAreCleared() {
         val edited = txn("e1", "2026-11-04").copy(edited = true, userCategory = "Food", category = "Food", label = "milk")
         val untouched = txn("u1", "2026-11-05")

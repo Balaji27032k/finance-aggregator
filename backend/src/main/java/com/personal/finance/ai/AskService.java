@@ -16,12 +16,14 @@ public class AskService {
 
     private final TransactionQueryService transactions;
     private final ProfileService profiles;
+    private final RatesService rates;
     private final AskEngine engine;
     private final Clock clock;
 
-    public AskService(TransactionQueryService transactions, ProfileService profiles, AiModel model, Clock clock) {
+    public AskService(TransactionQueryService transactions, ProfileService profiles, RatesService rates, AiModel model, Clock clock) {
         this.transactions = transactions;
         this.profiles = profiles;
+        this.rates = rates;
         this.engine = new AskEngine(model, clock);
         this.clock = clock;
     }
@@ -30,6 +32,6 @@ public class AskService {
         LocalDate today = LocalDate.now(clock.withZone(IST));
         var all = transactions.list(
                 today.minusDays(MAX_DAYS + 2L).atStartOfDay(IST).toInstant(), today.plusDays(2).atStartOfDay(IST).toInstant(), MAX_GROUPS);
-        return engine.ask(request, all, profiles.find().orElse(null));
+        return engine.ask(request, all, profiles.find().orElse(null), rates.coachDefaults());
     }
 }

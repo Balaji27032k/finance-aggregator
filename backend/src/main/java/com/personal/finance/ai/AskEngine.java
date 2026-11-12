@@ -218,6 +218,11 @@ public final class AskEngine {
     }
 
     public Response ask(Request request, List<TransactionView> all, Profile profile) {
+        return ask(request, all, profile, Map.of());
+    }
+
+    /** [rateDefaults] are recently fetched rates the coach assumes for anything the person has not set themselves. */
+    public Response ask(Request request, List<TransactionView> all, Profile profile, Map<String, Double> rateDefaults) {
         LocalDate today = LocalDate.now(clock.withZone(IST));
         List<String> sent = new ArrayList<>();
         String question = Scrub.question(request.question(), 300);
@@ -227,7 +232,7 @@ public final class AskEngine {
 
         Plan plan = null;
         if (ai.configured()) {
-            plan = aiPlan(question, request.history(), vocab, today, profile, sent);
+            plan = aiPlan(question, request.history(), vocab, today, profile, rateDefaults, sent);
         }
         boolean aiUsed = plan != null;
         if (plan == null) {
@@ -239,7 +244,7 @@ public final class AskEngine {
             case "spend_on" -> spendOn(plan, entries);
             case "summary" -> summary(plan, usable);
             case "biggest" -> biggest(plan, usable);
-            case "advice", "coach" -> coaching(plan, usable, profile, question, request.history());
+            case "advice", "coach" -> coaching(plan, usable, profile, rateDefaults, question, request.history());
             default -> new Outcome(plan.clarify() != null ? plan.clarify()
                     : "I did not quite get that. Try \"how much did I spend on tea this month\" or \"what were my biggest expenses last month\".",
                     null, null, null, List.of(), List.of(), new HashMap<>());
@@ -274,7 +279,8 @@ public final class AskEngine {
 
     // ---- planning ----
 
-    private Plan aiPlan(String question, List<Turn> history, List<Vocab> vocab, LocalDate today, Profile profile, List<String> sent) {
+    private Plan aiPlan(String question, List<Turn> history, List<Vocab> vocab, LocalDate today, Profile profile, Map<String, Double> rates,
+                        List<String> sent) {
         List<Map<String, Object>> past = new ArrayList<>();
         if (history != null) {
             int from = Math.max(0, history.size() - 6);
@@ -291,7 +297,7 @@ public final class AskEngine {
         body.put("question", question);
         body.put("history", past);
         body.put("names", names);
-        body.put("profile", profileFacts(profile));
+        body.put("profile", profileFacts(profile, rates));
         String payload = mapper.writeValueAsString(body);
         Optional<String> reply = ai.generate(PLAN_SYSTEM, payload, true);
         if (reply.isEmpty()) {
@@ -737,7 +743,8 @@ public final class AskEngine {
     }
 
     /** Everything the coach works from: real income and spending, the profile and any calculations the plan asked for. */
-    private Outcome coaching(Plan plan, List<TransactionView> usable, Profile profile, String question, List<Turn> history) {
+    private Outcome coaching(Plan plan, List<TransactionView> usable, Profile profile, Map<String, Double> rateDefaults, String question,
+                             List<Turn> history) {
         Outcome base = advice(plan, usable);
         Map<String, Object> facts = base.facts();
         facts.put("intent", plan.intent());
@@ -754,14 +761,14 @@ public final class AskEngine {
 
         Map<String, TransactionView> latest = new HashMap<>();
         for (TransactionView v : usable) {
-            if (v.balanceAfter() != null && v.accountLast4() != null) {
+            if (v.balanceAfter() != null && v.accountLast4() != null && !"CARD".equalsIgnoreCase(v.paymentMode())) {
                 latest.merge(v.accountLast4(), v, (a, b) -> b.eventTimestamp().isAfter(a.eventTimestamp()) ? b : a);
             }
         }
         if (!latest.isEmpty()) {
             facts.put("approxBankBalanceTotal", latest.values().stream().map(TransactionView::balanceAfter).reduce(BigDecimal.ZERO, BigDecimal::add));
         }
-        facts.put("profile", profileFacts(profile));
+        facts.put("profile", profileFacts(profile, rateDefaults));
         List<Map<String, Object>> results = new ArrayList<>();
         for (CalcRequest c : plan.calcs()) {
             Map<String, Object> r = Calc.run(c);
@@ -781,10 +788,12 @@ public final class AskEngine {
     }
 
     /** The person's own details for the model: no name, and no identifiers, only amounts, ages and choices. */
-    private Map<String, Object> profileFacts(Profile p) {
+    private Map<String, Object> profileFacts(Profile p, Map<String, Double> fetched) {
         Map<String, Object> out = new LinkedHashMap<>();
+        Profile.Assumptions a = p == null ? null : p.assumptions();
         if (p == null || p.equals(Profile.empty())) {
             out.put("provided", false);
+            out.put("assumptions", rates(a, fetched));
             return out;
         }
         out.put("provided", true);
@@ -835,20 +844,28 @@ public final class AskEngine {
             }).toList());
             out.put("totalMonthlyEmis", p.loans().stream().mapToLong(l -> l.emi() == null ? 0 : l.emi()).sum());
         }
-        Profile.Assumptions a = p.assumptions();
-        Map<String, Object> rates = new LinkedHashMap<>();
-        rates.put("inflation", a != null && a.inflation() != null ? a.inflation() : Profile.Assumptions.INFLATION);
-        rates.put("equity", a != null && a.equity() != null ? a.equity() : Profile.Assumptions.EQUITY);
-        rates.put("debt", a != null && a.debt() != null ? a.debt() : Profile.Assumptions.DEBT);
-        rates.put("fd", a != null && a.fd() != null ? a.fd() : Profile.Assumptions.FD);
-        rates.put("ppf", a != null && a.ppf() != null ? a.ppf() : Profile.Assumptions.PPF);
-        rates.put("epf", a != null && a.epf() != null ? a.epf() : Profile.Assumptions.EPF);
-        rates.put("savingsAccount", a != null && a.savings() != null ? a.savings() : Profile.Assumptions.SAVINGS);
-        out.put("assumptions", rates);
+        out.put("assumptions", rates(a, fetched));
         if (p.notes() != null && !p.notes().isBlank()) {
             out.put("notes", Scrub.text(p.notes(), 500));
         }
         return out;
+    }
+
+    /** The person's own rate, else a recently fetched one, else a rough default. */
+    private static Map<String, Object> rates(Profile.Assumptions a, Map<String, Double> fetched) {
+        Map<String, Object> rates = new LinkedHashMap<>();
+        rates.put("inflation", pick(a == null ? null : a.inflation(), fetched.get("inflation"), Profile.Assumptions.INFLATION));
+        rates.put("equity", pick(a == null ? null : a.equity(), fetched.get("equity"), Profile.Assumptions.EQUITY));
+        rates.put("debt", pick(a == null ? null : a.debt(), null, Profile.Assumptions.DEBT));
+        rates.put("fd", pick(a == null ? null : a.fd(), fetched.get("fd"), Profile.Assumptions.FD));
+        rates.put("ppf", pick(a == null ? null : a.ppf(), fetched.get("ppf"), Profile.Assumptions.PPF));
+        rates.put("epf", pick(a == null ? null : a.epf(), fetched.get("epf"), Profile.Assumptions.EPF));
+        rates.put("savingsAccount", pick(a == null ? null : a.savings(), fetched.get("savings"), Profile.Assumptions.SAVINGS));
+        return rates;
+    }
+
+    private static double pick(Double own, Double fetched, double fallback) {
+        return own != null ? own : fetched != null ? fetched : fallback;
     }
 
     private static void putIf(Map<String, Object> map, String key, Object value) {
