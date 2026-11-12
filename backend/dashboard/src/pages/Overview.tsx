@@ -6,6 +6,7 @@ import { api, type DayPoint, type Txn } from '../api';
 import { categoryStyle } from '../categories';
 import { ago, cleanName, inr, inrShort, longDate, parseIso, pctChange, shortDate, toIso } from '../format';
 import { PaceCard } from '../PaceCard';
+import { AiAnalyser } from '../AiAnalyser';
 import { RangePicker, previousFor, useRange } from '../range';
 import { Card, ChartTip, Delta, ErrorBox, Money, Skeleton, TxnDrawer, TxnRow, useAsync } from '../ui';
 
@@ -50,6 +51,8 @@ export default function Overview() {
       </div>
 
       {summary.error && <ErrorBox message={summary.error} />}
+      <AiAnalyser question={`Summarise my spending from ${range.from} to ${range.to}`} label={`${longDate(range.from)} to ${longDate(range.to)}`} />
+      <div style={{ height: 16 }} />
       {!s && !summary.error && <div className="grid cols-4"><Skeleton /><Skeleton /><Skeleton /><Skeleton /></div>}
 
       {s && s.totals.count === 0 && s.balances.length === 0 && (

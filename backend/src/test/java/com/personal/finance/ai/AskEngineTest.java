@@ -211,6 +211,24 @@ class AskEngineTest {
         assertEquals(LocalDate.parse("2025-11-12"), AskEngine.parsePeriod("across 1 year", TODAY).orElseThrow().from());
         assertEquals(LocalDate.parse("2026-10-22"), AskEngine.parsePeriod("last 3 weeks", TODAY).orElseThrow().from());
         assertTrue(AskEngine.parsePeriod("how much on tea", TODAY).isEmpty());
+        AskEngine.Period iso = AskEngine.parsePeriod("summary from 2026-11-01 to 2026-11-12", TODAY).orElseThrow();
+        assertEquals(LocalDate.parse("2026-11-01"), iso.from());
+        assertEquals(LocalDate.parse("2026-11-12"), iso.to());
+    }
+
+    @Test
+    void aQuestionKeepsItsYearAndDatesButNamesDoNot() {
+        assertEquals("summary from 2026-11-01 to 2026-11-12", Scrub.question("summary from 2026-11-01 to 2026-11-12", 100));
+        assertEquals("march 2025", Scrub.question("march 2025", 100));
+        assertEquals("tea #", Scrub.question("tea 5867", 100));
+        assertEquals("A/c #", Scrub.text("A/c 2025", 100));
+    }
+
+    @Test
+    void aDateRangeQuestionWithoutAnAiStillAnswersForThatRange() {
+        Response r = engine(off()).ask(new Request("how much did I spend on dosa from 2026-11-01 to 2026-11-12", null), sample());
+        assertEquals(new BigDecimal("150"), r.exact().total());
+        assertEquals(LocalDate.parse("2026-11-01"), r.from());
     }
 
     @Test

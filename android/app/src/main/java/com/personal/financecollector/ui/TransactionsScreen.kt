@@ -124,6 +124,7 @@ fun TransactionsScreen(
     presetAccount: String? = null,
     onPresetUsed: () -> Unit = {},
     onExport: (List<LedgerTxn>) -> Unit = {},
+    onAskAi: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -194,7 +195,13 @@ fun TransactionsScreen(
                         )
                     }
                 }
-                TextButton(onClick = { onExport(shown) }, enabled = shown.isNotEmpty()) { Text("Export CSV") }
+                Row {
+                    TextButton(onClick = {
+                        val what = query.trim().ifBlank { category }
+                        onAskAi(if (what != null) "How much did I spend on $what" else "Summarise my spending this month")
+                    }) { Text("Ask AI") }
+                    TextButton(onClick = { onExport(shown) }, enabled = shown.isNotEmpty()) { Text("Export CSV") }
+                }
             }
         }
         if (shown.isEmpty()) {

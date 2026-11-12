@@ -174,7 +174,7 @@ public final class AskEngine {
     public Response ask(Request request, List<TransactionView> all) {
         LocalDate today = LocalDate.now(clock.withZone(IST));
         List<String> sent = new ArrayList<>();
-        String question = Scrub.text(request.question(), 300);
+        String question = Scrub.question(request.question(), 300);
         List<TransactionView> usable = all.stream().filter(v -> !OWN_TRANSFER.equals(v.category())).toList();
         List<Entry> entries = entries(usable.stream().filter(v -> v.direction() == Direction.DEBIT).toList());
         List<Vocab> vocab = vocabulary(entries, question);
@@ -344,6 +344,18 @@ public final class AskEngine {
     }
 
     static Optional<Period> parsePeriod(String q, LocalDate today) {
+        Matcher iso = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})\\s*(?:to|until|-|and)\\s*(\\d{4}-\\d{2}-\\d{2})").matcher(q);
+        if (iso.find()) {
+            try {
+                LocalDate from = LocalDate.parse(iso.group(1));
+                LocalDate to = LocalDate.parse(iso.group(2));
+                if (!from.isAfter(to)) {
+                    return Optional.of(clamp(from, to, describe(from, to), today));
+                }
+            } catch (RuntimeException e) {
+                // An impossible date falls through to the other phrases.
+            }
+        }
         Matcher unit = Pattern.compile("\\b(?:last|past)\\s+(\\d{1,3})\\s+(day|week|month|year)s?\\b").matcher(q);
         if (unit.find()) {
             int n = Integer.parseInt(unit.group(1));

@@ -62,6 +62,7 @@ fun OverviewScreen(
     onOpenBudgets: () -> Unit,
     onOpenBills: () -> Unit,
     onOpenAccounts: () -> Unit,
+    onAskAi: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var period by rememberSaveable { mutableStateOf(Period.MONTH) }
@@ -103,6 +104,16 @@ fun OverviewScreen(
             return@LazyColumn
         }
         item { HeroCard(stats) }
+        item {
+            InfoCard("AI analysis") {
+                Text(
+                    "A short plain-words summary of this period. It runs only when you tap.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = { onAskAi("Summarise my spending from ${stats.from} to ${stats.to}") }) { Text("Analyse this view") }
+            }
+        }
         item {
             InfoCard("Spending per " + if (stats.days > 45) "week" else "day") {
                 SpendingBars(stats.daily)

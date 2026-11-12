@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     private val adminViewModel: AdminViewModel by viewModels()
+    private val askViewModel: AskViewModel by viewModels()
 
     private val smsPermission =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -159,6 +161,7 @@ class MainActivity : ComponentActivity() {
             openPayees = {},
             openBudgets = {},
             openBills = {},
+            openActivity = {},
         )
         setContent {
             FinanceTheme {
@@ -179,7 +182,7 @@ class MainActivity : ComponentActivity() {
                 val export by viewModel.export.collectAsStateWithLifecycle()
                 val onOpen: (LedgerTxn) -> Unit = { openKey = it.key }
                 val screenActions = actions.copy(
-                    openSources = { tab = 5 }, openAccounts = { tab = 6 }, openPayees = { tab = 7 }, openBudgets = { tab = 8 }, openBills = { tab = 9 },
+                    openSources = { tab = 5 }, openAccounts = { tab = 6 }, openPayees = { tab = 7 }, openBudgets = { tab = 8 }, openBills = { tab = 9 }, openActivity = { tab = 10 },
                 )
                 val categoryBudgets by viewModel.categoryBudgets.collectAsStateWithLifecycle()
                 val netWorthExcluded by viewModel.netWorthExcluded.collectAsStateWithLifecycle()
@@ -198,7 +201,7 @@ class MainActivity : ComponentActivity() {
                         NavigationBar {
                             NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Icons.Default.Home, null) }, label = { Text("Overview", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Icons.AutoMirrored.Filled.List, null) }, label = { Text("Transactions", maxLines = 1, fontSize = 11.sp) })
-                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Notifications, null) }, label = { Text("Activity", maxLines = 1, fontSize = 11.sp) })
+                            NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Icons.Default.Star, null) }, label = { Text("Ask AI", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Icons.Default.Person, null) }, label = { Text("Admin", maxLines = 1, fontSize = 11.sp) })
                             NavigationBarItem(tab >= 4, { tab = 4 }, { Icon(Icons.Default.CheckCircle, null) }, label = { Text("Health", maxLines = 1, fontSize = 11.sp) })
                         }
@@ -217,12 +220,13 @@ class MainActivity : ComponentActivity() {
                             onOpenBudgets = { tab = 8 },
                             onOpenBills = { tab = 9 },
                             onOpenAccounts = { tab = 6 },
+                            onAskAi = { askViewModel.send(it); tab = 2 },
                             modifier = body,
                         )
                         1 -> TransactionsScreen(
-                            ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, body,
+                            ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, { askViewModel.send(it); tab = 2 }, body,
                         )
-                        2 -> EventsScreen(ledger, notUnderstood, onOpen, body)
+                        2 -> AskScreen(askViewModel, body)
                         3 -> AdminScreen(
                             vm = adminViewModel,
                             paired = health?.cloud?.paired == true,
@@ -254,7 +258,8 @@ class MainActivity : ComponentActivity() {
                         )
                         7 -> PayeesScreen(ledger, payeeRules, viewModel::setPayeeRule, viewModel::removePayeeRule, body)
                         8 -> BudgetsScreen(ledger, categoryBudgets, viewModel::setCategoryBudget, ::requestNotifications, notificationsVersion, body)
-                        else -> BillsScreen(ledger, ::requestNotifications, notificationsVersion, body)
+                        9 -> BillsScreen(ledger, ::requestNotifications, notificationsVersion, body)
+                        else -> EventsScreen(ledger, notUnderstood, onOpen, body)
                     }
                     ledger.firstOrNull { it.key == openKey }?.let {
                         TxnDetailSheet(

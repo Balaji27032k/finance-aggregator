@@ -128,6 +128,32 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
             }
         }
 
+    /** A plain-words question; the server may be waking up, so this waits longer than other calls. */
+    suspend fun ask(baseUrl: String, token: String, question: String, history: List<Pair<String, String>>): AskOutcome =
+        withContext(Dispatchers.IO) {
+            val url = normalizeBaseUrl(baseUrl) ?: return@withContext AskOutcome.Failed("backend URL is not https")
+            val request = Request.Builder()
+                .url("$url/api/v1/ask")
+                .header("Authorization", "Bearer $token")
+                .post(AskJson.request(question, history).toRequestBody(JSON))
+                .build()
+            val patient = client.newBuilder().readTimeout(100, java.util.concurrent.TimeUnit.SECONDS)
+                .callTimeout(110, java.util.concurrent.TimeUnit.SECONDS).build()
+            try {
+                patient.newCall(request).execute().use { response ->
+                    when (val code = response.code) {
+                        200 -> AskJson.parse(response.body.string())?.let { AskOutcome.Done(it) } ?: AskOutcome.Failed("unreadable answer")
+                        401, 403 -> AskOutcome.Unauthorized
+                        400 -> AskOutcome.Failed("the question was not accepted")
+                        429 -> AskOutcome.Failed("too many questions, wait a minute")
+                        else -> AskOutcome.Failed("HTTP $code")
+                    }
+                }
+            } catch (e: IOException) {
+                AskOutcome.Failed("could not reach the server (${e.javaClass.simpleName})")
+            }
+        }
+
     companion object {
         private val JSON = "application/json".toMediaType()
 

@@ -5,6 +5,7 @@ import { api, type Direction, type Txn, type TxnQuery } from '../api';
 import { cleanName, dateTimeIst, inr, longDate } from '../format';
 import { RangePicker, useRange } from '../range';
 import { Card, CategoryAvatar, ErrorBox, SourceChips, TxnDrawer, useAsync } from '../ui';
+import { AiAnalyser } from '../AiAnalyser';
 
 const PAGE = 25;
 
@@ -109,6 +110,13 @@ export default function Transactions() {
         <RangePicker />
       </div>
 
+      <AiAnalyser
+        question={(q || category)
+          ? `How much did I spend on ${q || category} from ${range.from} to ${range.to}`
+          : `Summarise my spending from ${range.from} to ${range.to}`}
+        label={q || category ? `${q || category}, ${longDate(range.from)} to ${longDate(range.to)}` : `${longDate(range.from)} to ${longDate(range.to)}`}
+      />
+      <div style={{ height: 12 }} />
       <Card title="How much did I spend on..." hint="for the dates chosen above">
         <label className="field search">
           <Search size={16} className="muted" />

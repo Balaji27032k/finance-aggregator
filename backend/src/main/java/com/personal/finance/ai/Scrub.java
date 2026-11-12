@@ -12,12 +12,22 @@ final class Scrub {
     private static final Pattern REFERENCE = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{9,}\\b");
     private static final Pattern DIGITS = Pattern.compile("\\d(?:[\\s-]?\\d){3,}");
     private static final Pattern CARD_STYLE = Pattern.compile("(?i)\\b(?:x{2,}|\\*{2,})\\s*\\d+");
+    private static final Pattern DATE_OR_YEAR = Pattern.compile("(?:19|20)\\d{2}(?:-\\d{2}-\\d{2})?");
 
     private Scrub() {
     }
 
     /** Emails and UPI ids, reference numbers, runs of four or more digits and masked account numbers become placeholders. */
     static String text(String value, int max) {
+        return scrub(value, max, false);
+    }
+
+    /** Like [text], but the user's own question may name a year or a date range, which are kept. */
+    static String question(String value, int max) {
+        return scrub(value, max, true);
+    }
+
+    private static String scrub(String value, int max, boolean keepDates) {
         if (value == null) {
             return "";
         }
@@ -25,7 +35,7 @@ final class Scrub {
         out = ID_OR_VPA.matcher(out).replaceAll("[id]");
         out = CARD_STYLE.matcher(out).replaceAll("[acct]");
         out = REFERENCE.matcher(out).replaceAll("[ref]");
-        out = DIGITS.matcher(out).replaceAll("#");
+        out = DIGITS.matcher(out).replaceAll(m -> keepDates && DATE_OR_YEAR.matcher(m.group()).matches() ? m.group() : "#");
         out = out.replaceAll("\\s+", " ").trim();
         return out.length() > max ? out.substring(0, max) : out;
     }
