@@ -38,6 +38,11 @@ logging:
       console: ecs
 
 app:
+  ai:
+    # Empty key: Ask AI uses the built-in search only.
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-flash-lite-latest}
+    daily-limit: ${AI_DAILY_LIMIT:150}
   rate-limit:
     anonymous-per-minute: 5
     device-per-minute: 300
