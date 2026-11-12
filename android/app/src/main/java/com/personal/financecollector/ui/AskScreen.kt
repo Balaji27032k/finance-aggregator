@@ -189,7 +189,7 @@ private fun Details(reply: AskReply) {
     if (reply.breakdown.isNotEmpty()) {
         Column {
             Text(reply.breakdownTitle.orEmpty(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            reply.breakdown.forEach { g -> StatRow("${g.name} \u00b7 ${g.count}", rupeesWhole(g.total)) }
+            reply.breakdown.forEach { g -> StatRow(g.name + if (g.count > 0) " \u00b7 ${g.count}" else "", rupeesWhole(g.total)) }
         }
     }
     if (reply.items.isNotEmpty()) {

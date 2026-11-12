@@ -202,6 +202,52 @@ class AskEngineTest {
     }
 
     @Test
+    void savingsAndCutBackQuestionsGetAdviceNotTheSameSummary() {
+        List<TransactionView> data = new ArrayList<>(sample());
+        LocalDate d = LocalDate.parse("2026-11-02");
+        data.add(new TransactionView(50L, Direction.CREDIT, new BigDecimal("10000"), "INR", d, d.atTime(9, 0).toInstant(ZoneOffset.UTC), "Employer",
+                null, "5867", "NEFT", null, null, null, "Salary", null, List.of(), List.of()));
+        for (String q : List.of("am I good at savings or not?", "what do I need to cut to improve my savings", "any tips to spend less")) {
+            Response r = engine(off()).ask(new Request(q, null), data);
+            assertEquals("advice", r.intent(), q);
+        }
+        Response r = engine(off()).ask(new Request("am I good at savings?", null), data);
+        assertTrue(r.answer().contains("90%"), r.answer());
+        assertTrue(r.answer().contains("healthy"), r.answer());
+        assertEquals("Food & drinks", r.breakdown().get(0).name());
+        // Plain spending questions are not mistaken for advice.
+        assertEquals("spend_on", engine(off()).ask(new Request("how much on cutlery", null), data).intent());
+    }
+
+    @Test
+    void theModelGetsIncomeMonthsAndCategoriesToCoachFromAndItsAdviceIsShown() {
+        List<String> seen = new ArrayList<>();
+        AiModel model = new AiModel() {
+            public boolean configured() {
+                return true;
+            }
+
+            public Optional<String> generate(String system, String user, boolean json) {
+                seen.add(system.startsWith("You are a kind") ? "ADVICE:" + user : user);
+                return json
+                        ? Optional.of("{\"intent\":\"advice\",\"terms\":[],\"related\":[],\"from\":\"2026-06-01\",\"to\":\"2026-11-12\",\"periodLabel\":\"the last 6 months\"}")
+                        : Optional.of("You are keeping most of what you earn. Food is your biggest category.");
+            }
+        };
+        LocalDate d = LocalDate.parse("2026-11-02");
+        List<TransactionView> data = new ArrayList<>(sample());
+        data.add(new TransactionView(50L, Direction.CREDIT, new BigDecimal("10000"), "INR", d, d.atTime(9, 0).toInstant(ZoneOffset.UTC), "Employer",
+                null, "5867", "NEFT", null, null, null, "Salary", null, List.of(), List.of()));
+        Response r = engine(model).ask(new Request("how can I do better with money", null), data);
+        assertTrue(r.aiUsed());
+        assertEquals("advice", r.intent());
+        assertTrue(seen.get(1).startsWith("ADVICE:"));
+        assertTrue(seen.get(1).contains("savingsRatePercent") && seen.get(1).contains("topCategories") && seen.get(1).contains("months"));
+        assertFalse(seen.get(1).contains("5867"));
+        assertTrue(r.answer().startsWith("You are keeping most"));
+    }
+
+    @Test
     void periodsAreReadFromTheQuestion() {
         assertEquals(LocalDate.parse("2026-10-01"), AskEngine.parsePeriod("spend last month", TODAY).orElseThrow().from());
         assertEquals(LocalDate.parse("2026-10-31"), AskEngine.parsePeriod("spend last month", TODAY).orElseThrow().to());

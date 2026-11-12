@@ -53,7 +53,7 @@ public class GeminiClient implements AiModel {
         try {
             Map<String, Object> config = json
                     ? Map.of("temperature", 0.2, "maxOutputTokens", 900, "responseMimeType", "application/json")
-                    : Map.of("temperature", 0.5, "maxOutputTokens", 400);
+                    : Map.of("temperature", 0.5, "maxOutputTokens", 700);
             String body = mapper.writeValueAsString(Map.of(
                     "systemInstruction", Map.of("parts", List.of(Map.of("text", system))),
                     "contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", user)))),

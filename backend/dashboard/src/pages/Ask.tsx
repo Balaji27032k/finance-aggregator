@@ -49,7 +49,7 @@ function Details({ reply }: { reply: AskReply }) {
           <div className="muted" style={{ marginBottom: 4 }}>{reply.breakdownTitle}</div>
           {reply.breakdown.map((g) => (
             <div className="ask-line" key={g.name}>
-              <span>{g.name} <span className="muted">· {g.count}</span></span>
+              <span>{g.name}{g.count > 0 && <span className="muted"> · {g.count}</span>}</span>
               <span className="num">{inr(g.total, true)}</span>
             </div>
           ))}
