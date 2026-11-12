@@ -29,6 +29,7 @@ data class TxnSplitEntity(
     val eventId: String,
     val category: String,
     val amount: String,
+    val name: String? = null,
 )
 
 @Dao

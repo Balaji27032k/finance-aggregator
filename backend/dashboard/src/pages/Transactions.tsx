@@ -112,7 +112,7 @@ export default function Transactions() {
       <Card title="How much did I spend on..." hint="for the dates chosen above">
         <label className="field search">
           <Search size={16} className="muted" />
-          <input placeholder="tea, petrol, a payee or a split item" value={askText} onChange={(e) => setAskText(e.target.value)} aria-label="Spend on" />
+          <input placeholder="dosa, tea, petrol, a payee or any category" value={askText} onChange={(e) => setAskText(e.target.value)} aria-label="Spend on" />
         </label>
         {spend.error && <ErrorBox message={spend.error} />}
         {spend.data && (
@@ -205,7 +205,7 @@ export default function Transactions() {
                       </div>
                     </div>
                   </td>
-                  <td className="muted">{t.splits.length > 0 ? t.splits.map((p) => `${p.category} ${inr(p.amount)}`).join(' · ') : t.category}</td>
+                  <td className="muted">{t.splits.length > 0 ? t.splits.map((p) => `${p.name ?? p.category} ${inr(p.amount)}`).join(' · ') : t.category}</td>
                   <td className="muted" style={{ whiteSpace: 'nowrap' }}>{t.transactionDate ? longDate(t.transactionDate) : dateTimeIst(t.eventTimestamp)}</td>
                   <td className="muted">{t.paymentMode ?? '-'}</td>
                   <td><SourceChips txn={t} /></td>

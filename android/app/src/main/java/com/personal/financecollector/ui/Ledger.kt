@@ -10,7 +10,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-data class SplitPart(val category: String, val amount: BigDecimal)
+/** [name] is what this part was, such as "Masala dosa"; several parts can share a category. */
+data class SplitPart(val category: String, val amount: BigDecimal, val name: String? = null)
 
 /** One channel's copy of a transaction, for example the SMS or the e-mail. */
 data class TxnPart(val source: String, val kind: StatusKind, val statusText: String, val capturedMs: Long, val problem: String?)

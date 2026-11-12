@@ -137,7 +137,7 @@ public class AdminDataController {
             return BigDecimal.ZERO;
         }
         if (!v.splits().isEmpty()) {
-            return v.splits().stream().filter(p -> contains(p.category(), needle)).map(TransactionView.Split::amount)
+            return v.splits().stream().filter(p -> contains(p.category(), needle) || contains(p.name(), needle)).map(TransactionView.Split::amount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
         boolean hit = contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.label(), needle) || contains(v.category(), needle);
@@ -174,7 +174,7 @@ public class AdminDataController {
     private static boolean matches(TransactionView v, String needle) {
         return contains(v.counterparty(), needle) || contains(v.note(), needle) || contains(v.label(), needle) || contains(v.referenceNo(), needle)
                 || contains(v.accountLast4(), needle) || contains(v.category(), needle)
-                || v.splits().stream().anyMatch(p -> contains(p.category(), needle))
+                || v.splits().stream().anyMatch(p -> contains(p.category(), needle) || contains(p.name(), needle))
                 || v.amount().stripTrailingZeros().toPlainString().contains(needle);
     }
 

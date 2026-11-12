@@ -5,10 +5,14 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Reads and writes the compact text form of a split payment. */
+/** Reads and writes the compact text form of a split payment: "Category|Name|amount;Category|Name|amount". */
 final class Splits {
 
     private Splits() {
+    }
+
+    private static String plain(String value) {
+        return value == null ? "" : value.replace('|', ' ').replace(';', ' ');
     }
 
     static String encode(List<Split> parts) {
@@ -20,7 +24,7 @@ final class Splits {
             if (out.length() > 0) {
                 out.append(';');
             }
-            out.append(p.category().replace('|', ' ').replace(';', ' ')).append('|').append(p.amount().toPlainString());
+            out.append(plain(p.category())).append('|').append(plain(p.name())).append('|').append(p.amount().toPlainString());
         }
         return out.toString();
     }
@@ -34,9 +38,11 @@ final class Splits {
         BigDecimal sum = BigDecimal.ZERO;
         try {
             for (String piece : text.split(";")) {
-                int bar = piece.lastIndexOf('|');
-                BigDecimal amount = new BigDecimal(piece.substring(bar + 1));
-                parts.add(new Split(piece.substring(0, bar), amount));
+                // Two fields (Category|amount) is the earlier form without a name.
+                String[] f = piece.split("\\|", -1);
+                BigDecimal amount = new BigDecimal(f[f.length - 1]);
+                String name = f.length >= 3 && !f[1].isBlank() ? f[1] : null;
+                parts.add(new Split(f[0], name, amount));
                 sum = sum.add(amount);
             }
         } catch (RuntimeException e) {

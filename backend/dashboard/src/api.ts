@@ -25,7 +25,7 @@ export interface Txn {
   category: string;
   label: string | null;
   sources: Source[];
-  splits: { category: string; amount: number }[];
+  splits: { category: string; name: string | null; amount: number }[];
 }
 
 export interface SpendLookup {

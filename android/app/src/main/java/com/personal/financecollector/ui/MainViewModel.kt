@@ -181,7 +181,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ) { base, labels, rules, own, splits ->
         LedgerOverlay.apply(
             base, labels.associateBy { it.eventId }, rules.associate { it.payeeKey to it.category }, ownSettings(own),
-            splits.groupBy({ it.eventId }, { SplitPart(it.category, java.math.BigDecimal(it.amount)) }),
+            splits.groupBy({ it.eventId }, { SplitPart(it.category, java.math.BigDecimal(it.amount), it.name) }),
         )
     }
         .flowOn(Dispatchers.Default)
@@ -205,7 +205,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun saveSplit(txn: LedgerTxn, parts: List<SplitPart>) {
         viewModelScope.launch {
             planDao.deleteSplits(txn.eventIds)
-            planDao.insertSplits(parts.map { TxnSplitEntity(eventId = txn.eventIds.first(), category = it.category, amount = it.amount.toPlainString()) })
+            planDao.insertSplits(parts.map { TxnSplitEntity(eventId = txn.eventIds.first(), category = it.category, amount = it.amount.toPlainString(), name = it.name) })
             kickChecks()
         }
     }

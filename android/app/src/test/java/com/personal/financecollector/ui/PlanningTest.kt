@@ -121,6 +121,25 @@ class PlanningTest {
     }
 
     @Test
+    fun partsInOneCategoryAreToldApartByTheirNames() {
+        val parts = listOf(
+            SplitPart("Food & drinks", BigDecimal("150"), "Masala dosa"),
+            SplitPart("Food & drinks", BigDecimal("50"), "Tea"),
+        )
+        val t = txn("d", "2026-11-04", "200", who = "Hotel Saravana", category = "Food & drinks", splits = parts)
+        assertEquals(BigDecimal("150"), matchedSpend(t, "dosa"))
+        assertEquals(BigDecimal("50"), matchedSpend(t, "TEA"))
+        assertEquals(BigDecimal("200"), matchedSpend(t, "food"))
+        // The payee does not count once the parts are named.
+        assertEquals(BigDecimal.ZERO, matchedSpend(t, "saravana"))
+        assertEquals(BigDecimal("100"), matchedSpend(txn("w", "2026-11-04", "100", who = "Dosa Corner"), "dosa"))
+        assertEquals(BigDecimal.ZERO, matchedSpend(txn("i", "2026-11-04", "100", credit = true, who = "Dosa Corner"), "dosa"))
+        // A renamed part is sent again.
+        val renamed = parts.map { it.copy(name = "x") }
+        assertTrue(LabelSync.signature("A", null, parts) != LabelSync.signature("A", null, renamed))
+    }
+
+    @Test
     fun aChangedSplitIsSentAgainAndAmountsNeedAtMostTwoDecimals() {
         val parts = listOf(SplitPart("Tea", BigDecimal("20")), SplitPart("Biscuits", BigDecimal("30")))
         val t = txn("sp", "2026-11-04", "50", splits = parts).copy(edited = true)

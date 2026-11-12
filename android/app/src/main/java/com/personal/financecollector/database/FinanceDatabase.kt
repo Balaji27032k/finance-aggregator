@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CategoryBudgetEntity::class,
         TxnSplitEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class FinanceDatabase : RoomDatabase() {
@@ -50,6 +50,13 @@ abstract class FinanceDatabase : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `label_sync` (`eventId` TEXT NOT NULL, `signature` TEXT NOT NULL, PRIMARY KEY(`eventId`))")
                 db.execSQL("CREATE TABLE IF NOT EXISTS `category_budgets` (`category` TEXT NOT NULL, `limitRupees` INTEGER NOT NULL, PRIMARY KEY(`category`))")
                 db.execSQL("CREATE TABLE IF NOT EXISTS `txn_splits` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `eventId` TEXT NOT NULL, `category` TEXT NOT NULL, `amount` TEXT NOT NULL)")
+            }
+        }
+
+        /** Lets each part of a split payment carry a name such as "Masala dosa". */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `txn_splits` ADD COLUMN `name` TEXT")
             }
         }
     }

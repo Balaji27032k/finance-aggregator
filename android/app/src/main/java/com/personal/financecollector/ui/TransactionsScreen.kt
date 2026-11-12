@@ -53,8 +53,22 @@ internal fun matches(t: LedgerTxn, query: String): Boolean {
     if (query.isBlank()) return true
     val q = query.trim().lowercase()
     return listOfNotNull(t.counterparty, t.label, t.note, t.referenceNo, t.category, t.accountLast4, t.paymentMode)
-        .plus(t.splits.map { it.category })
+        .plus(t.splits.flatMap { listOfNotNull(it.category, it.name) })
         .any { it.lowercase().contains(q) } || t.amount.stripTrailingZeros().toPlainString().contains(q)
+}
+
+/**
+ * How much of this payment went on what was searched for: only the named parts of a split payment, otherwise the whole
+ * payment when its payee, note, description or category fits. Money in and own transfers never count.
+ */
+internal fun matchedSpend(t: LedgerTxn, query: String): java.math.BigDecimal {
+    val q = query.trim().lowercase()
+    if (q.isEmpty() || t.credit || t.internalTransfer) return java.math.BigDecimal.ZERO
+    fun hit(s: String?) = s != null && s.lowercase().contains(q)
+    if (t.splits.isNotEmpty()) {
+        return t.splits.filter { hit(it.category) || hit(it.name) }.fold(java.math.BigDecimal.ZERO) { acc, p -> acc + p.amount }
+    }
+    return if (hit(t.counterparty) || hit(t.note) || hit(t.label) || hit(t.category)) t.amount else java.math.BigDecimal.ZERO
 }
 
 @Composable
@@ -137,6 +151,9 @@ fun TransactionsScreen(
         }
     }
     val grouped = remember(shown) { shown.groupBy { it.date }.toSortedMap(compareByDescending { it }) }
+    val spentOnQuery = remember(shown, query) {
+        if (query.isBlank()) null else shown.fold(java.math.BigDecimal.ZERO) { acc, t -> acc + matchedSpend(t, query) }
+    }
 
     LazyColumn(modifier.fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
@@ -163,11 +180,20 @@ fun TransactionsScreen(
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${shown.size} transaction${if (shown.size == 1) "" else "s"}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column {
+                    Text(
+                        "${shown.size} transaction${if (shown.size == 1) "" else "s"}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (spentOnQuery != null && spentOnQuery.signum() > 0) {
+                        Text(
+                            "Spent on \u201c${query.trim()}\u201d: ${rupeesWhole(spentOnQuery)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
                 TextButton(onClick = { onExport(shown) }, enabled = shown.isNotEmpty()) { Text("Export CSV") }
             }
         }
@@ -236,7 +262,7 @@ fun TxnDetailSheet(
             txn.label?.let { Text("“$it”", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary) }
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Detail("Category", txn.category + if (txn.internalTransfer) " (not counted in spending)" else "")
-                txn.splits.forEach { Detail("  Split: " + it.category, EventPresenter.rupees(it.amount)) }
+                txn.splits.forEach { Detail("  " + (it.name ?: it.category), EventPresenter.rupees(it.amount) + if (it.name != null) " (${it.category})" else "") }
                 Detail("Date", txn.date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
                 txn.paymentMode?.let { Detail("Payment mode", it) }

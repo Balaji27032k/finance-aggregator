@@ -13,7 +13,7 @@ object LedgerLoader {
             db.labelDao().labels().associateBy { it.eventId },
             db.labelDao().rules().associate { it.payeeKey to it.category },
             ownSettings(db.labelDao().ownAccounts()),
-            db.planDao().splits().groupBy({ it.eventId }, { SplitPart(it.category, java.math.BigDecimal(it.amount)) }),
+            db.planDao().splits().groupBy({ it.eventId }, { SplitPart(it.category, java.math.BigDecimal(it.amount), it.name) }),
         )
     }
 }

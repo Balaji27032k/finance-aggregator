@@ -29,12 +29,12 @@ public record TransactionView(
     public record Source(String type, String bankCode) {
     }
 
-    /** The user's own split of a payment between categories; the parts add up to the amount. */
-    public record Split(String category, BigDecimal amount) {
+    /** The user's own split of a payment; [name] is what it was, such as "Masala dosa" (may be null). The parts add up to the amount. */
+    public record Split(String category, String name, BigDecimal amount) {
     }
 
     /** The category and amount pairs this payment counts as in category totals. */
     public List<Split> partsByCategory() {
-        return splits.isEmpty() ? List.of(new Split(category, amount)) : splits;
+        return splits.isEmpty() ? List.of(new Split(category, null, amount)) : splits;
     }
 }

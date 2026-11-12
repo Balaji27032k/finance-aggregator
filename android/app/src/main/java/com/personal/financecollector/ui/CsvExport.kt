@@ -26,7 +26,7 @@ object CsvExport {
                 t.balanceAfter?.toPlainString().orEmpty(),
                 t.note.orEmpty(),
                 t.sources.joinToString("+"),
-                t.splits.joinToString("; ") { "${it.category} ${it.amount.toPlainString()}" },
+                t.splits.joinToString("; ") { "${it.name?.let { n -> "$n / " }.orEmpty()}${it.category} ${it.amount.toPlainString()}" },
             )
         }
         return (listOf(header) + rows).joinToString("\r\n") { r -> r.joinToString(",") { cell(it) } } + "\r\n"

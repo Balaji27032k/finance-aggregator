@@ -103,7 +103,7 @@ class BackendApi(private val client: OkHttpClient) : UploadApi {
             val array = JSONArray()
             items.forEach {
                 val parts = JSONArray()
-                it.splits.forEach { s -> parts.put(JSONObject().put("category", s.category).put("amount", s.amount.toPlainString())) }
+                it.splits.forEach { s -> parts.put(JSONObject().put("category", s.category).put("name", s.name ?: JSONObject.NULL).put("amount", s.amount.toPlainString())) }
                 array.put(
                     JSONObject().put("localEventId", it.localEventId)
                         .put("category", it.category ?: JSONObject.NULL).put("label", it.label ?: JSONObject.NULL)

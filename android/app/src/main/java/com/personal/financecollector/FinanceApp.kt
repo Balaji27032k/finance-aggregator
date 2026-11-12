@@ -64,7 +64,7 @@ object KnownApps {
 class AppContainer(context: Context) {
     val db: FinanceDatabase =
         Room.databaseBuilder(context, FinanceDatabase::class.java, FinanceDatabase.NAME)
-            .addMigrations(FinanceDatabase.MIGRATION_1_2, FinanceDatabase.MIGRATION_2_3)
+            .addMigrations(FinanceDatabase.MIGRATION_1_2, FinanceDatabase.MIGRATION_2_3, FinanceDatabase.MIGRATION_3_4)
             .build()
     val http: okhttp3.OkHttpClient = okhttp3.OkHttpClient.Builder()
         .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)

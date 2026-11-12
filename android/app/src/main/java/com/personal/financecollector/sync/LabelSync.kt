@@ -40,7 +40,7 @@ class LabelSync(
         private const val CHUNK = 100
 
         fun signature(category: String?, label: String?, splits: List<SplitPart> = emptyList()) =
-            "${category.orEmpty()}\u0001${label.orEmpty()}\u0001${splits.joinToString(";") { "${it.category}=${it.amount.toPlainString()}" }}"
+            "${category.orEmpty()}\u0001${label.orEmpty()}\u0001${splits.joinToString(";") { "${it.category}=${it.name.orEmpty()}=${it.amount.toPlainString()}" }}"
 
         /** Events the user has changed (or that are own transfers) and anything sent earlier that is no longer changed. */
         fun plan(ledger: List<LedgerTxn>, sent: Map<String, String>): Plan {

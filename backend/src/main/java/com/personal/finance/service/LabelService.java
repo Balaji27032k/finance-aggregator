@@ -41,7 +41,7 @@ public class LabelService {
         for (LabelItem.Part p : item.splits()) {
             String category = clean(p.category());
             if (category != null) {
-                parts.add(new TransactionView.Split(category, p.amount()));
+                parts.add(new TransactionView.Split(category, clean(p.name()), p.amount()));
             }
         }
         return Splits.encode(parts);

@@ -64,6 +64,18 @@ class UserLabelTest extends AdminTestBase {
 
         mvc.perform(post("/api/v1/transactions/labels").header("Authorization", device.bearer()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"labels\":[{\"localEventId\":\"spl-1\",\"category\":\"Food & drinks\",\"label\":null,"
+                                + "\"splits\":[{\"category\":\"Food & drinks\",\"name\":\"Zzdosa\",\"amount\":20.00},{\"category\":\"Food & drinks\",\"name\":\"Zzchaya\",\"amount\":30.00}]}]}"))
+                .andExpect(status().isOk());
+
+        // Two parts in the same category are still told apart by what they were.
+        mvc.perform(get("/api/admin/spend?term=zzdosa&" + range).cookie(cookie))
+                .andExpect(jsonPath("$.total").value(20.00))
+                .andExpect(jsonPath("$.items[0].transaction.splits[0].name").value("Zzdosa"));
+        mvc.perform(get("/api/admin/spend?term=zzchaya&" + range).cookie(cookie)).andExpect(jsonPath("$.total").value(30.00));
+        mvc.perform(get("/api/admin/spend?term=chai&" + range).cookie(cookie)).andExpect(jsonPath("$.count").value(0));
+
+        mvc.perform(post("/api/v1/transactions/labels").header("Authorization", device.bearer()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"labels\":[{\"localEventId\":\"spl-1\",\"category\":\"Food & drinks\",\"label\":null,"
                                 + "\"splits\":[{\"category\":\"Zzcuppa\",\"amount\":20.00},{\"category\":\"Zzbiscuits\",\"amount\":30.00}]}]}"))
                 .andExpect(status().isOk());
 

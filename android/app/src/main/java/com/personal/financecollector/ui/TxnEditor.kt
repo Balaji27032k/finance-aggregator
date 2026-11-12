@@ -133,7 +133,7 @@ fun TxnEditSheet(
                 }
                 if (!txn.credit) {
                     TextButton(onClick = { splitting = true }) {
-                        Text(if (txn.splits.isNotEmpty()) "Edit split (${txn.splits.joinToString(", ") { it.category }})" else "Split across categories")
+                        Text(if (txn.splits.isNotEmpty()) "Edit split (${txn.splits.joinToString(", ") { it.name ?: it.category }})" else "Split across categories or items")
                     }
                 }
             }

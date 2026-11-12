@@ -29,9 +29,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.math.BigDecimal
 
-private class SplitRow(category: String, amount: String) {
+private class SplitRow(category: String, amount: String, name: String = "") {
     var category by mutableStateOf(category)
     var amount by mutableStateOf(amount)
+    var name by mutableStateOf(name)
 }
 
 /** Parses split amounts; null when a row is empty, not a positive number, or has more than two decimals. */
@@ -51,7 +52,7 @@ fun SplitDialog(
 ) {
     val rows = remember(txn.key) {
         mutableStateListOf<SplitRow>().apply {
-            if (txn.splits.isNotEmpty()) txn.splits.forEach { add(SplitRow(it.category, it.amount.stripTrailingZeros().toPlainString())) }
+            if (txn.splits.isNotEmpty()) txn.splits.forEach { add(SplitRow(it.category, it.amount.stripTrailingZeros().toPlainString(), it.name.orEmpty())) }
             else {
                 add(SplitRow(txn.category, ""))
                 add(SplitRow(if (txn.category == "Other") "Groceries" else "Other", ""))
@@ -65,24 +66,34 @@ fun SplitDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Split ${EventPresenter.rupees(txn.amount)} across categories") },
+        title = { Text("Split ${EventPresenter.rupees(txn.amount)}") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 rows.forEachIndexed { i, row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CategoryPicker(row.category, { row.category = it }, Modifier.weight(1f), knownCategories)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         OutlinedTextField(
-                            value = row.amount,
-                            onValueChange = { row.amount = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
-                            placeholder = { Text("Amount") },
+                            value = row.name,
+                            onValueChange = { row.name = it.take(60) },
+                            label = { Text("What was it? (optional)") },
+                            placeholder = { Text("For example: Masala dosa") },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            modifier = Modifier.width(120.dp),
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        if (rows.size > 2) TextButton(onClick = { rows.removeAt(i) }) { Text("Remove") }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CategoryPicker(row.category, { row.category = it }, Modifier.weight(1f), knownCategories)
+                            OutlinedTextField(
+                                value = row.amount,
+                                onValueChange = { row.amount = it.filter { c -> c.isDigit() || c == '.' }.take(12) },
+                                placeholder = { Text("Amount") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier.width(120.dp),
+                            )
+                            if (rows.size > 2) TextButton(onClick = { rows.removeAt(i) }) { Text("Remove") }
+                        }
                     }
                 }
-                if (rows.size < 5) TextButton(onClick = { rows += SplitRow("Other", if (left.signum() > 0) left.stripTrailingZeros().toPlainString() else "") }) { Text("Add another category") }
+                if (rows.size < 5) TextButton(onClick = { rows += SplitRow(rows.lastOrNull()?.category ?: "Other", if (left.signum() > 0) left.stripTrailingZeros().toPlainString() else "") }) { Text("Add another part") }
                 Text(
                     when {
                         left.signum() == 0 -> "Adds up to the full amount."
@@ -93,7 +104,7 @@ fun SplitDialog(
                     color = if (left.signum() == 0) MoneyColors.income() else MaterialTheme.colorScheme.error,
                 )
                 Text(
-                    "Name a part anything, such as Tea or Biscuits, and later ask the dashboard how much went on it. Amounts can have up to two decimals.",
+                    "Give each part a name, such as Masala dosa or Tea, even when they share a category. Later you can add up everything spent on one name. Amounts can have up to two decimals.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -107,7 +118,7 @@ fun SplitDialog(
         confirmButton = {
             TextButton(
                 enabled = ok,
-                onClick = { onSave(rows.mapIndexed { i, r -> SplitPart(r.category.trim().take(30), amounts!![i]) }) },
+                onClick = { onSave(rows.mapIndexed { i, r -> SplitPart(r.category.trim().take(30), amounts!![i], r.name.trim().ifBlank { null }) }) },
             ) { Text("Save split") }
         },
         dismissButton = {

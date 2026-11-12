@@ -19,6 +19,7 @@ public record LabelItem(
     /** One share of a payment that the user split across categories. */
     public record Part(
             @NotBlank @Size(max = 40) String category,
+            @Size(max = 60) String name,
             @NotNull @DecimalMin("0.01") @Digits(integer = 12, fraction = 2) BigDecimal amount) {
     }
 
