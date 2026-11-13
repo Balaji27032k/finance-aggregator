@@ -590,7 +590,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val statementMessage = MutableStateFlow<String?>(null)
 
     /** Reads a statement file the user picked and adds its lines for [last4], then sends them up like any other transaction. */
-    fun importStatement(uri: android.net.Uri, bank: String, last4: String) {
+    fun importStatement(uri: android.net.Uri, bank: String, last4: String, password: String) {
         viewModelScope.launch {
             statementMessage.value = "Reading the statement..."
             val ctx = getApplication<Application>()
@@ -605,9 +605,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 statementMessage.value = "Could not open that file."
                 return@launch
             }
-            val isOldExcel = bytes.size > 4 && bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte()
-            val text = if (isOldExcel) "PK" else String(bytes, Charsets.UTF_8)
-            val r = com.personal.financecollector.collector.StatementImporter(db).import(text, bank, last4)
+            val r = withContext(Dispatchers.Default) {
+                com.personal.financecollector.collector.StatementImporter(db).import(bytes, password.ifEmpty { null }, bank, last4)
+            }
             statementMessage.value = when {
                 r.problem != null -> r.problem
                 else -> "Added ${r.added} transaction${if (r.added == 1) "" else "s"} from ${shortDate(r.from!!)} to ${shortDate(r.to!!)}." +

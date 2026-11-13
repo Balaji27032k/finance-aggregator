@@ -273,7 +273,7 @@ fun TxnDetailSheet(
                 Detail("Date", txn.date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
                 if (txn.timeKnown) Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
                 txn.paymentMode?.let { Detail("Payment mode", it) }
-                txn.accountLast4?.let { Detail("Account", "ending $it" + if (txn.accountAssumed) " (assumed)" else "") }
+                txn.accountLast4?.let { Detail("Account", "ending $it") }
                 txn.counterpartyAccountLast4?.let { Detail("Other account", "ending $it") }
                 txn.referenceNo?.let { Detail("Reference", it) }
                 txn.balanceAfter?.let { Detail("Balance after", EventPresenter.rupees(it)) }

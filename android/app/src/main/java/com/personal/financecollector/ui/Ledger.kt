@@ -53,8 +53,6 @@ data class LedgerTxn(
     val splits: List<SplitPart> = emptyList(),
     /** When a card or ATM number in the message was tied to one of the user's accounts, the digits the message actually showed. */
     val instrumentLast4: String? = null,
-    /** True when the account was not in any message and was inferred from the accounts the user listed. */
-    val accountAssumed: Boolean = false,
     /** False for a transaction known only from a bank statement, which has a date but no time of day. */
     val timeKnown: Boolean = true,
 ) {

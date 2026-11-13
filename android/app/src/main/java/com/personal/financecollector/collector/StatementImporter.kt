@@ -20,9 +20,13 @@ data class StatementImportResult(
 /** Stores the lines of a downloaded statement as events, so they merge with the bank's alerts and upload like any other. */
 class StatementImporter(private val db: FinanceDatabase) {
 
-    suspend fun import(text: String, bank: String, last4: String): StatementImportResult {
-        val parsed = StatementParser.parse(text)
+    suspend fun import(file: ByteArray, password: String?, bank: String, last4: String): StatementImportResult {
+        val parsed = StatementParser.parseFile(file, password)
         if (parsed.problem != null) return StatementImportResult(0, 0, parsed.skipped, null, null, parsed.problem)
+        val number = parsed.accountNumber
+        if (number != null && !number.endsWith(last4)) {
+            return StatementImportResult(0, 0, 0, null, null, "This statement is for the account ending ${number.takeLast(4)}, not ending $last4. Pick that account instead.")
+        }
         val now = System.currentTimeMillis()
         val seen = HashMap<String, Int>()
         val perDay = HashMap<LocalDate, Int>()

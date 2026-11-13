@@ -47,7 +47,7 @@ abstract class EventDao {
 
     /** Messages that were captured but could not be read as a transaction. */
     @Query(
-        "SELECT * FROM raw_financial_events WHERE uploadStatus = 'NEEDS_REVIEW' " +
+        "SELECT * FROM raw_financial_events WHERE uploadStatus = 'NEEDS_REVIEW' AND sourceType != 'NOTIFICATION' " +
             "AND IFNULL(lastError, '') = 'message format not recognised yet' " +
             "ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit",
     )
@@ -59,10 +59,10 @@ abstract class EventDao {
     @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('PENDING','UPLOADING','RETRY')")
     abstract fun observePendingCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('FAILED_PERMANENTLY','NEEDS_REVIEW')")
+    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE uploadStatus IN ('FAILED_PERMANENTLY','NEEDS_REVIEW') AND sourceType != 'NOTIFICATION'")
     abstract fun observeFailedCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE parserStatus = 'NEEDS_REVIEW'")
+    @Query("SELECT COUNT(*) FROM raw_financial_events WHERE parserStatus = 'NEEDS_REVIEW' AND sourceType != 'NOTIFICATION'")
     abstract fun observeNeedsReviewCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM raw_financial_events")

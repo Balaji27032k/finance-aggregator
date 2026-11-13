@@ -16,54 +16,111 @@ import org.junit.Test
 
 class StatementParserTest {
 
-    private val sample = """
-Account Name :,SOME PERSON
-Account Number :,00000012345867
-Txn Date,Value Date,Description,Ref No./Cheque No.,Debit,Credit,Balance
-10 Nov 2026,10 Nov 2026,"UPI/DR/412345678901/ARCHANA S/YESB/archana@ybl/UPI",412345678901,100.00,,"5,400.50"
-10 Nov 2026,10 Nov 2026,"UPI/DR/412345678902/AUTO DRIVER/YESB/9876543210@ybl/UPI",412345678902,10.00,,5390.50
-11 Nov 2026,11 Nov 2026,"TO TRANSFER-ATM WDL ABC",,"2,000.00",,3390.50
-12-11-2026,12-11-2026,"BY TRANSFER-NEFT*HDFC*ACME LTD SALARY",N123456789,,"50,000.00","53,390.50"
-***,Closing balance,,,,,
-""".trimIndent()
+    // Same layout as a YONO statement: preamble, quoted descriptions wrapped mid-word onto lines that start with a space, a summary footer.
+    private val sample = "\"Mr. A  Person\nperson@example.com\",\"State Bank of India  \nSOMEWHERE\",,,,\n" +
+        "Date of Statement  :  13-11-2026,Branch Code  :  918,,,,\n" +
+        "Limit  :  0.00,Account Number  :  40490535867,,,,\n" +
+        "Date,Details,Ref No/Cheque No,Debit,Credit,Balance\n" +
+        "05/10/2021,\" CASH DEPOSIT SELF  \n  AT 00918 SIVAGANGA\",,,1000.00,1000.00\n" +
+        "10/11/2026,\" WDL TFR   UPI/DR/412345678901/ARCHANA /FDRL/arc\n hanaraj/tea   0097695162091 AT 00918 SIVAGANGA\",000000,20.00,,980.50\n" +
+        "11/11/2026,\" DEP TFR   UPI/CR/412345678902/Mr SAMPL/IDIB/975\n 1015210/Paym   0097735162098 AT 00918 SIVAGANGA\",,,\"1,500.00\",\"2,480.50\"\n" +
+        "12/11/2026,\" ATM WDL   ATM CASH 5847  SIV\n AGANGA OFFSITE     SIVAGANGA\",,1000.00,,1480.50\n" +
+        ",,,,,\n" +
+        "Statement Summary : 01-01-2021  To  13-11-2026,,,,,\n" +
+        "Brought Forward (?),Dr Count,Cr Count,Total Debits (?),Total Credits (?),Closing Balance (?)\n" +
+        "0.00,1229,337,\"27,61,583.34\",\"28,00,242.97\",\"1,480.50CR\"\n"
+
+    private fun narrate(text: String) = StatementParser.narrate(StatementParser.description(text))
 
     @Test
-    fun readsEachLineWithItsAmountDirectionAndBalance() {
+    fun readsWrappedQuotedLinesAndIgnoresTheFooter() {
         val parsed = StatementParser.parse(sample)
         assertNull(parsed.problem)
+        assertEquals("40490535867", parsed.accountNumber)
         assertEquals(4, parsed.rows.size)
-        assertEquals(LocalDate.parse("2026-11-10"), parsed.rows[0].date)
-        assertEquals(BigDecimal("100.00"), parsed.rows[0].debit)
-        assertEquals(BigDecimal("5400.50"), parsed.rows[0].balance)
-        assertEquals(BigDecimal("50000.00"), parsed.rows[3].credit)
-        assertEquals(LocalDate.parse("2026-11-12"), parsed.rows[3].date)
+        assertEquals(0, parsed.skipped)
+        assertEquals(LocalDate.parse("2021-10-05"), parsed.rows[0].date)
+        assertEquals(BigDecimal("1000.00"), parsed.rows[0].credit)
+        assertEquals(BigDecimal("20.00"), parsed.rows[1].debit)
+        assertEquals(BigDecimal("2480.50"), parsed.rows[2].balance)
+        assertEquals(BigDecimal("1500.00"), parsed.rows[2].credit)
     }
 
     @Test
-    fun aUpiLineGivesTheReferenceAndThePersonsName() {
-        val row = StatementParser.parse(sample).rows[0]
+    fun aWrappedLineIsJoinedWithoutInventingASpace() {
+        val d = StatementParser.parse(sample).rows[2].description
+        assertEquals("DEP TFR UPI/CR/412345678902/Mr SAMPL/IDIB/9751015210/Paym 0097735162098 AT 00918 SIVAGANGA", d)
+    }
+
+    @Test
+    fun aUpiLineGivesPersonReferenceAndTheTypedRemark() {
+        val n = narrate(" WDL TFR   UPI/DR/412345678901/ARCHANA /FDRL/arc\n hanaraj/tea   0097695162091 AT 00918 SIVAGANGA")
+        assertEquals("ARCHANA", n.counterparty)
+        assertEquals("UPI", n.mode)
+        assertEquals("412345678901", n.reference)
+        assertEquals("tea", n.note)
+    }
+
+    @Test
+    fun theAppsDefaultRemarkIsNotTreatedAsANote() {
+        assertNull(narrate(" DEP TFR   UPI/CR/412345678902/Mr SAMPL/IDIB/975\n 1015210/Paym   0097735162098 AT 00918 SIVAGANGA").note)
+        assertNull(narrate(" WDL TFR   UPI/DR/412345678902/Mr SAMPL/IDIB/ndevathana/UPI   0097735162098 AT 00918 SIVAGANGA").note)
+    }
+
+    @Test
+    fun otherLineKindsAreRecognised() {
+        assertEquals("ATM", narrate(" ATM WDL   ATM CASH 5847  SIV\n AGANGA OFFSITE     SIVAGANGA").mode)
+        assertNull(narrate(" ATM WDL   ATM CASH 5847  SIV\n AGANGA OFFSITE     SIVAGANGA").counterparty)
+        val pos = narrate(" POS ATM PURCH   OTHPOS4225172928\n 28EATGOOD TECHNOLOGIES PBangalore")
+        assertEquals("CARD", pos.mode)
+        assertEquals("EATGOOD TECHNOLOGIES PBangalore", pos.counterparty)
+        val neft = narrate(" DEP TFR   NEFT*CITI0100000*CITIN21262511717*TAT\n A CONSULTANC   0099970044309 AT 00918 SIVAGANGA")
+        assertEquals("TATA CONSULTANC", neft.counterparty)
+        assertEquals("CITIN21262511717", neft.reference)
+        assertEquals("IMPS", narrate(" DEP TFR   INB IMPS127816538132/4443325375/XX187\n 6/Send Money   0097936162097 AT 00918 SIVAGANGA").mode)
+        assertEquals("UPI reversal", narrate(" DEP TFR   UPI/REV/416854878173  \n  0097696162090 AT 00918 SIVAGANGA").note)
+        assertEquals("Bank charges", narrate(" DEBIT   ATMCard \n AMC  652294*2458").counterparty)
+        assertEquals("Interest", narrate(" INTERES\n T CREDIT").counterparty)
+    }
+
+    @Test
+    fun aStatementLineBecomesATransactionWithItsAccount() {
+        val row = StatementParser.parse(sample).rows[1]
         val t = StatementParser.parseEvent(StatementParser.payload("SBI", "5867", row))!!
         assertEquals("DEBIT", t.direction)
-        assertEquals("ARCHANA S", t.counterparty)
-        assertEquals("412345678901", t.referenceNo)
-        assertEquals("UPI", t.paymentMode)
         assertEquals("5867", t.accountLast4)
+        assertEquals("412345678901", t.referenceNo)
+        assertEquals(BigDecimal("980.50"), t.balanceAfter)
     }
 
     @Test
-    fun anAtmLineHasNoPayeeAndIsCashWithdrawal() {
-        val row = StatementParser.parse(sample).rows[2]
-        val t = StatementParser.parseEvent(StatementParser.payload("SBI", "5867", row))!!
-        assertNull(t.counterparty)
-        assertEquals("ATM", t.paymentMode)
+    fun aPasswordProtectedExcelStatementOpensWithTheRightPassword() {
+        val bytes = resource("/statement_encrypted.xlsx")
+        val parsed = StatementParser.parseFile(bytes, "test-password-1")
+        assertNull(parsed.problem)
+        assertEquals(3, parsed.rows.size)
+        assertEquals(LocalDate.parse("2026-11-10"), parsed.rows[0].date)
+        assertEquals(BigDecimal("20.00"), parsed.rows[0].debit)
+        assertEquals(BigDecimal("500.00"), parsed.rows[1].credit)
+        assertEquals("ARCHANA", StatementParser.narrate(parsed.rows[0].description).counterparty)
     }
 
     @Test
-    fun anExcelFileIsRefusedWithAHelpfulMessage() {
-        val parsed = StatementParser.parse("PK\u0003\u0004binary")
-        assertTrue(parsed.rows.isEmpty())
-        assertNotNull(parsed.problem)
-        assertTrue(parsed.problem!!.contains("CSV"))
+    fun aWrongOrMissingPasswordIsReportedNotGuessed() {
+        val bytes = resource("/statement_encrypted.xlsx")
+        assertTrue(StatementParser.parseFile(bytes, "nope").problem!!.contains("did not open"))
+        assertTrue(StatementParser.parseFile(bytes, null).problem!!.contains("password"))
+    }
+
+    @Test
+    fun anExcelStatementWithoutAPasswordWorksToo() {
+        val parsed = StatementParser.parseFile(resource("/statement_plain.xlsx"), null)
+        assertNull(parsed.problem)
+        assertEquals(3, parsed.rows.size)
+        val n = StatementParser.narrate(parsed.rows[0].description)
+        assertEquals("ARCHANA", n.counterparty)
+        assertEquals("tea", n.note)
+        assertEquals("ATM", StatementParser.narrate(parsed.rows[2].description).mode)
     }
 
     @Test
@@ -74,12 +131,13 @@ Txn Date,Value Date,Description,Ref No./Cheque No.,Debit,Credit,Balance
     }
 
     @Test
-    fun tabSeparatedStatementsAndTwoDigitYearsWork() {
+    fun excelDateNumbersAndTabSeparatedFilesAreUnderstood() {
+        assertEquals(LocalDate.parse("2021-10-05"), StatementParser.parseDate("44474"))
         val tsv = "Txn Date\tDescription\tDebit\tCredit\tBalance\n01/11/26\tUPI/DR/999999999999/SHOP/YESB/x@ybl/UPI\t45.00\t\t100.00"
-        val rows = StatementParser.parse(tsv).rows
-        assertEquals(1, rows.size)
-        assertEquals(LocalDate.parse("2026-11-01"), rows[0].date)
+        assertEquals(LocalDate.parse("2026-11-01"), StatementParser.parse(tsv).rows.single().date)
     }
+
+    private fun resource(name: String) = StatementParserTest::class.java.getResourceAsStream(name)!!.readBytes()
 
     private fun event(id: String, type: SourceType, ms: Long, payload: String, app: String) = RawFinancialEventEntity(
         localEventId = id, sourceType = type, sourceApplication = app, sourceSender = null, sourceEventId = id,
@@ -88,32 +146,33 @@ Txn Date,Value Date,Description,Ref No./Cheque No.,Debit,Credit,Balance
     )
 
     private fun statementEvent(id: String, line: String, offsetSeconds: Int = 0): RawFinancialEventEntity {
-        val row = StatementParser.parse(
-            "Txn Date,Description,Ref No./Cheque No.,Debit,Credit,Balance\n$line",
-        ).rows.single()
+        val row = StatementParser.parse("Date,Details,Ref No/Cheque No,Debit,Credit,Balance\n$line").rows.single()
         return event(id, SourceType.MANUAL, StatementParser.timestampOf(row.date) + offsetSeconds * 1000L, StatementParser.payload("SBI", "5867", row), "SBI")
     }
 
     @Test
-    fun aStatementLineJoinsThePaymentAppNotificationForTheSamePayment() {
-        val statement = statementEvent("s", "10 Nov 2026,UPI/DR/412345678901/ARCHANA S/YESB/archana@ybl/UPI,412345678901,100.00,,5400.50")
-        val note = event(
-            "n", SourceType.NOTIFICATION, StatementParser.timestampOf(LocalDate.parse("2026-11-10")) + 3 * 3_600_000L,
-            "Archana S paid you Rs 100", "com.google.android.apps.nbu.paisa.user",
+    fun paymentAppNotificationsAreNotTransactions() {
+        val n = event("n", SourceType.NOTIFICATION, 1_000_000_000_000L, "You paid Rs 100.00 to Archana S", "com.google.android.apps.nbu.paisa.user")
+        assertNull(TransactionParser.parse(n))
+    }
+
+    @Test
+    fun aStatementLineAndTheBanksOwnSmsForTheSamePaymentAreOneTransaction() {
+        val statement = statementEvent("s", "10/11/2026,UPI/DR/412345678901/SHOP/YESB/shop@ybl/UPI 0097695162091 AT 00918 SIVAGANGA,,100.00,,5400.50")
+        val sms = event(
+            "m", SourceType.SMS, StatementParser.timestampOf(LocalDate.parse("2026-11-10")) + 3 * 3_600_000L,
+            "Rs.100.00 debited A/c XX5867 to SHOP on 10-11-26 UPI Ref 412345678901", "SBIUPI",
         )
-        // the notification text is a payment-app "you paid" form
-        val paid = note.copy(rawPayload = "You paid Rs 100.00 to Archana S")
-        val ledger = LedgerBuilder.build(listOf(statement, paid))
+        val ledger = LedgerBuilder.build(listOf(statement, sms))
         assertEquals(1, ledger.size)
-        assertEquals(listOf("Statement", "Notification").sorted(), ledger[0].sources.sorted())
-        assertEquals("5867", ledger[0].accountLast4)
+        assertEquals(listOf("SMS", "Statement"), ledger[0].sources.sorted())
         assertTrue(ledger[0].timeKnown)
     }
 
     @Test
-    fun twoStatementLinesStayTwoEvenWhenIdenticalAndAStatementOnlyPaymentHasNoTimeOfDay() {
-        val a = statementEvent("a", "10 Nov 2026,TO TRANSFER-RAMESH,,10.00,,500.00", 1)
-        val b = statementEvent("b", "10 Nov 2026,TO TRANSFER-RAMESH,,10.00,,490.00", 2)
+    fun twoStatementLinesStayTwoEvenWhenIdenticalAndHaveNoTimeOfDay() {
+        val a = statementEvent("a", "10/11/2026,TO TRANSFER-RAMESH,,10.00,,500.00", 1)
+        val b = statementEvent("b", "10/11/2026,TO TRANSFER-RAMESH,,10.00,,490.00", 2)
         val ledger = LedgerBuilder.build(listOf(a, b))
         assertEquals(2, ledger.size)
         assertTrue(ledger.none { it.timeKnown })
@@ -121,7 +180,7 @@ Txn Date,Value Date,Description,Ref No./Cheque No.,Debit,Credit,Balance
 
     @Test
     fun aStatementLineIsNotMergedWithAnotherBanksSms() {
-        val statement = statementEvent("s", "10 Nov 2026,TO TRANSFER-RAMESH,,100.00,,500.00")
+        val statement = statementEvent("s", "10/11/2026,TO TRANSFER-RAMESH,,100.00,,500.00")
         val sms = event(
             "m", SourceType.SMS, StatementParser.timestampOf(LocalDate.parse("2026-11-10")) + 1000,
             "Rs.100.00 debited A/c XX0001 to RAMESH on 10-11-26 UPI Ref 555555555555", "CSBBNK",

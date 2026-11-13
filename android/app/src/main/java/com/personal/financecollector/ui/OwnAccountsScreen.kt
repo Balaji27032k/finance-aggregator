@@ -42,14 +42,15 @@ fun OwnAccountsScreen(
     netWorthExcluded: Set<String>,
     onToggleNetWorth: (String, Boolean) -> Unit,
     statementMessage: String?,
-    onImportStatement: (android.net.Uri, String, String) -> Unit,
+    onImportStatement: (android.net.Uri, String, String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var bank by remember { mutableStateOf("") }
     var statementAccount by remember { mutableStateOf<String?>(null) }
+    var statementPassword by remember { mutableStateOf("") }
     val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         val chosen = entries.firstOrNull { it.kind == "ACCOUNT" && it.value == statementAccount }
-        if (uri != null && chosen != null) onImportStatement(uri, chosen.display.substringBefore(" ending "), chosen.value)
+        if (uri != null && chosen != null) onImportStatement(uri, chosen.display.substringBefore(" ending "), chosen.value, statementPassword)
     }
     var digits by remember { mutableStateOf("") }
     var digitsError by remember { mutableStateOf(false) }
@@ -139,8 +140,8 @@ fun OwnAccountsScreen(
             Panel {
                 Text("Add transactions from a bank statement", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Some banks, SBI for one, send few or no messages. Download the statement as CSV (in SBI YONO: Accounts > Statement > Download), " +
-                        "pick the account, and choose the file. Payments already seen in a notification are matched, not counted twice, and importing the same file again adds nothing.",
+                    "Some banks, SBI for one, send few or no messages. Download the statement from the bank (CSV or Excel .xlsx, password protected is fine), " +
+                        "pick the account, and choose the file. Only SMS, e-mail and statements count as proof of a payment. Importing the same file again adds nothing.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -149,6 +150,15 @@ fun OwnAccountsScreen(
                         androidx.compose.material3.FilterChip(statementAccount == e.value, { statementAccount = e.value }, { Text(e.display) })
                     }
                 }
+                OutlinedTextField(
+                    value = statementPassword,
+                    onValueChange = { statementPassword = it },
+                    label = { Text("File password (only if it has one)") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = statementAccount != null, modifier = Modifier.fillMaxWidth()) {
                     Text(if (statementAccount == null) "Pick an account first" else "Choose the statement file")
                 }

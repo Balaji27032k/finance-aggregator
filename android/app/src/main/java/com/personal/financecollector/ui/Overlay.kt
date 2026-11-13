@@ -44,22 +44,6 @@ object LedgerOverlay {
         }
     }
 
-    /**
-     * A payment-app alert (Google Pay and the like) does not say which bank paid. When exactly one of the user's listed accounts is at a
-     * bank that sends almost no alerts of its own, such a payment is most likely from it, so it is shown there and marked as assumed.
-     */
-    internal fun assumeSilentAccount(rows: List<LedgerTxn>, own: OwnSettings): List<LedgerTxn> {
-        if (own.accountBrands.size < 2) return rows
-        val alerts = rows.filter { "SMS" in it.sources || "Email" in it.sources }.groupingBy { it.accountLast4 }.eachCount()
-        val silent = own.accountBrands.keys.filter { (alerts[it] ?: 0) < SILENT_BELOW }
-        val target = silent.singleOrNull() ?: return rows
-        return rows.map { t ->
-            if (t.accountLast4 == null && t.sources.all { it == "Notification" }) t.copy(accountLast4 = target, accountAssumed = true) else t
-        }
-    }
-
-    private const val SILENT_BELOW = 3
-
     fun apply(
         raw: List<LedgerTxn>,
         labels: Map<String, TransactionLabelEntity>,
@@ -67,7 +51,7 @@ object LedgerOverlay {
         own: OwnSettings,
         splits: Map<String, List<SplitPart>> = emptyMap(),
     ): List<LedgerTxn> {
-        val base = assumeSilentAccount(tieCardsToAccounts(raw, own), own)
+        val base = tieCardsToAccounts(raw, own)
         // Once the user has listed their accounts, only those count as theirs; until then every account seen in messages does.
         val accounts = own.accountLast4s.ifEmpty { detectedAccounts(base) }
         val names = own.names.map { words(it) }.filter { it.isNotEmpty() }

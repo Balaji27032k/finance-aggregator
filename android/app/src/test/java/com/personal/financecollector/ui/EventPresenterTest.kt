@@ -46,12 +46,10 @@ class EventPresenterTest {
     }
 
     @Test
-    fun aNotificationIsLabelledWithTheAppName() {
+    fun aPaymentAppNotificationIsKeptButNotShownAsATransaction() {
         val c = EventPresenter.present(event(SourceType.NOTIFICATION, "com.google.android.apps.nbu.paisa.user", "Sample Person paid you ₹500.00", UploadStatus.PENDING))
-        assertEquals("Sample Person", c.title)
-        assertEquals("+₹500.00", c.amount)
-        assertTrue(c.details.endsWith("GPAY"))
-        assertEquals("Waiting to upload", c.status)
+        assertFalse(c.understood)
+        assertNull(c.amount)
     }
 
     @Test
