@@ -88,7 +88,7 @@ fun OwnAccountsScreen(
                     Column(Modifier.weight(1f).clickable { onOpenAccount(e.value) }.padding(vertical = 4.dp)) {
                         Text(e.display, fontWeight = FontWeight.Medium)
                         Text(
-                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${EventPresenter.rupees(it.balance)}" } ?: " \u00b7 no balance in the messages yet") + " \u203a",
+                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${EventPresenter.rupees(it.balance)} as of ${shortDate(java.time.Instant.ofEpochMilli(it.asOfMs).atZone(LedgerBuilder.IST).toLocalDate())}" } ?: " \u00b7 no balance in the messages yet") + " \u203a",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

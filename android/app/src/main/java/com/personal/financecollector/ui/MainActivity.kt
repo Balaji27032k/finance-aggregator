@@ -186,6 +186,7 @@ class MainActivity : ComponentActivity() {
                 )
                 val categoryBudgets by viewModel.categoryBudgets.collectAsStateWithLifecycle()
                 val netWorthExcluded by viewModel.netWorthExcluded.collectAsStateWithLifecycle()
+                val balanceSnapshots by viewModel.balanceSnapshots.collectAsStateWithLifecycle()
                 BackHandler(enabled = tab >= 5) { tab = 4 }
                 val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
                 val statementMessage by viewModel.statementMessage.collectAsStateWithLifecycle()
@@ -218,6 +219,7 @@ class MainActivity : ComponentActivity() {
                             onSeeAll = { tab = 1 },
                             categoryLimits = categoryBudgets,
                             netWorthExcluded = netWorthExcluded,
+                            balanceSnapshots = balanceSnapshots,
                             myAccounts = ownEntries.filter { it.kind == "ACCOUNT" }.map { it.value }.toSet(),
                             onOpenBudgets = { tab = 8 },
                             onOpenBills = { tab = 9 },
@@ -229,7 +231,7 @@ class MainActivity : ComponentActivity() {
                             ledger, onOpen, linkedCategory, linkedQuery, linkedAccount, { linkedCategory = null; linkedQuery = null; linkedAccount = null }, ::exportCsv, { askViewModel.send(it); tab = 2 }, body,
                         )
                         2 -> AskScreen(askViewModel, body)
-                        3 -> ProfileScreen(profileViewModel, accountLines(ownEntries, NetWorthCalculator.latestBalances(ledger)), { tab = 6 }, body)
+                        3 -> ProfileScreen(profileViewModel, accountLines(ownEntries, NetWorthCalculator.latestBalances(ledger, balanceSnapshots)), { tab = 6 }, body)
                         4 -> HealthScreen(health, pairingMessage, export, screenActions, body)
                         5 -> SourcesScreen(
                             apps = apps,
@@ -247,7 +249,7 @@ class MainActivity : ComponentActivity() {
                             onAddName = viewModel::addOwnName,
                             onRemove = viewModel::removeOwn,
                             onOpenAccount = { linkedAccount = it; linkedCategory = null; linkedQuery = null; tab = 1 },
-                            balances = NetWorthCalculator.latestBalances(ledger),
+                            balances = NetWorthCalculator.latestBalances(ledger, balanceSnapshots),
                             aliases = accountAliases,
                             netWorthExcluded = netWorthExcluded,
                             onToggleNetWorth = viewModel::setIncludedInNetWorth,

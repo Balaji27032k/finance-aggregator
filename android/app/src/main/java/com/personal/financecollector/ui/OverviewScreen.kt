@@ -58,6 +58,7 @@ fun OverviewScreen(
     onSeeAll: () -> Unit,
     categoryLimits: Map<String, Long>,
     netWorthExcluded: Set<String>,
+    balanceSnapshots: List<AccountBalance>,
     myAccounts: Set<String>,
     onOpenBudgets: () -> Unit,
     onOpenBills: () -> Unit,
@@ -70,7 +71,7 @@ fun OverviewScreen(
     val (from, to) = period.range(today)
     val stats = remember(ledger, period) { StatsCalculator.compute(ledger, from, to, period.previous(today)) }
     val pace = remember(ledger) { StatsCalculator.monthPace(ledger, today) }
-    val netWorth = remember(ledger, netWorthExcluded, myAccounts) { NetWorthCalculator.compute(ledger, netWorthExcluded, today, myAccounts) }
+    val netWorth = remember(ledger, netWorthExcluded, myAccounts, balanceSnapshots) { NetWorthCalculator.compute(ledger, netWorthExcluded, today, myAccounts, balanceSnapshots) }
     val budgets = remember(ledger, categoryLimits) { BudgetCalculator.statuses(ledger, categoryLimits, java.time.YearMonth.from(today)) }
     val bills = remember(ledger) { BillDetector.detect(ledger, today) }
 

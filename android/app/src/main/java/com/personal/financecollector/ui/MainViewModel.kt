@@ -54,7 +54,7 @@ import java.time.ZonedDateTime
 
 data class InstalledApp(val packageName: String, val label: String)
 
-private const val LEDGER_EVENTS = 6000
+private const val LEDGER_EVENTS = LedgerLoader.LEDGER_EVENTS
 
 data class DetectedAccount(val bankCode: String, val last4: String, val count: Int)
 
@@ -164,7 +164,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val parsedCache = HashMap<String, ParsedTransaction?>()
-    private val baseLedger: StateFlow<List<LedgerTxn>> = db.eventDao().observeRecent(LEDGER_EVENTS)
+    private val baseLedger: StateFlow<List<LedgerTxn>> = db.eventDao().observeLedgerEvents(LEDGER_EVENTS)
         .map { all ->
             LedgerBuilder.build(all) { e ->
                 if (parsedCache.containsKey(e.localEventId)) parsedCache[e.localEventId]
@@ -589,6 +589,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** What happened to the last statement the user imported. */
     val statementMessage = MutableStateFlow<String?>(null)
 
+    val balanceSnapshots: StateFlow<List<AccountBalance>> = db.configDao().observe(BalanceSnapshots.KEY)
+        .map { BalanceSnapshots.parse(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** Reads a statement file the user picked and adds its lines for [last4], then sends them up like any other transaction. */
     fun importStatement(uri: android.net.Uri, bank: String, last4: String, password: String) {
         viewModelScope.launch {
@@ -608,11 +612,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val r = withContext(Dispatchers.Default) {
                 com.personal.financecollector.collector.StatementImporter(db).import(bytes, password.ifEmpty { null }, bank, last4)
             }
+            val fmt = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.ENGLISH)
             statementMessage.value = when {
                 r.problem != null -> r.problem
-                else -> "Added ${r.added} transaction${if (r.added == 1) "" else "s"} from ${shortDate(r.from!!)} to ${shortDate(r.to!!)}." +
+                else -> "Added ${r.added} transaction${if (r.added == 1) "" else "s"} from ${r.from!!.format(fmt)} to ${r.to!!.format(fmt)}." +
                     (if (r.alreadyHad > 0) " ${r.alreadyHad} were already here." else "") +
-                    (if (r.skipped > 0) " ${r.skipped} line${if (r.skipped == 1) " was" else "s were"} not clear enough to read and left out." else "")
+                    (if (r.skipped > 0) " ${r.skipped} line${if (r.skipped == 1) " was" else "s were"} not clear enough to read and left out." else "") +
+                    (if (r.statedBalance != null) " Balance taken from the statement: ${EventPresenter.rupees(r.statedBalance)} on ${r.statedOn!!.format(fmt)}." else "") +
+                    (if (r.statedOn != null && r.to.isBefore(r.statedOn.minusDays(7))) " Warning: the file has no lines after ${r.to.format(fmt)} although it was downloaded on ${r.statedOn.format(fmt)}. Download the missing days and import that file too." else "")
             }
             if (r.added > 0) UploadScheduler.enqueueNow(ctx)
         }

@@ -6,8 +6,10 @@ import kotlinx.coroutines.withContext
 
 /** Builds the same corrected transaction list the app shows, for code that runs outside the screens (the home-screen widget). */
 object LedgerLoader {
+    const val LEDGER_EVENTS = 20000
+
     suspend fun load(db: FinanceDatabase): List<LedgerTxn> = withContext(Dispatchers.Default) {
-        val base = LedgerBuilder.build(db.eventDao().recentList(6000))
+        val base = LedgerBuilder.build(db.eventDao().ledgerEvents(LEDGER_EVENTS))
         LedgerOverlay.apply(
             base,
             db.labelDao().labels().associateBy { it.eventId },

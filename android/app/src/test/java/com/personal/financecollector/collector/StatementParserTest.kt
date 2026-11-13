@@ -20,6 +20,7 @@ class StatementParserTest {
     private val sample = "\"Mr. A  Person\nperson@example.com\",\"State Bank of India  \nSOMEWHERE\",,,,\n" +
         "Date of Statement  :  13-11-2026,Branch Code  :  918,,,,\n" +
         "Limit  :  0.00,Account Number  :  40490535867,,,,\n" +
+        "\"Clear Balance  :  11,114.29CR\",Branch Name  :  SOMEWHERE,,,,\n" +
         "Date,Details,Ref No/Cheque No,Debit,Credit,Balance\n" +
         "05/10/2021,\" CASH DEPOSIT SELF  \n  AT 00918 SIVAGANGA\",,,1000.00,1000.00\n" +
         "10/11/2026,\" WDL TFR   UPI/DR/412345678901/ARCHANA /FDRL/arc\n hanaraj/tea   0097695162091 AT 00918 SIVAGANGA\",000000,20.00,,980.50\n" +
@@ -31,6 +32,24 @@ class StatementParserTest {
         "0.00,1229,337,\"27,61,583.34\",\"28,00,242.97\",\"1,480.50CR\"\n"
 
     private fun narrate(text: String) = StatementParser.narrate(StatementParser.description(text))
+
+    @Test
+    fun theBalanceAtTheTopOfTheStatementIsReadAndNewerThanTheLastLine() {
+        val parsed = StatementParser.parse(sample)
+        assertEquals(BigDecimal("11114.29"), parsed.balance)
+        assertEquals(LocalDate.parse("2026-11-13"), parsed.balanceDate)
+        val stored = com.personal.financecollector.ui.BalanceSnapshots.update(null, "SBI", "5867", parsed.balance!!, parsed.balanceDate!!)
+        val snap = com.personal.financecollector.ui.BalanceSnapshots.parse(stored)
+        assertEquals(1, snap.size)
+        val rows = StatementParser.parse(sample).rows.map { StatementParser.payload("SBI", "5867", it) }
+        val ledger = LedgerBuilder.build(rows.mapIndexed { i, p ->
+            val row = StatementParser.parse(sample).rows[i]
+            event("e$i", SourceType.MANUAL, StatementParser.timestampOf(row.date), p, "SBI")
+        })
+        // Without the snapshot the last line wins; with it the newer stated balance does.
+        assertEquals(BigDecimal("1480.50"), com.personal.financecollector.ui.NetWorthCalculator.latestBalances(ledger).single().balance)
+        assertEquals(BigDecimal("11114.29"), com.personal.financecollector.ui.NetWorthCalculator.latestBalances(ledger, snap).single().balance)
+    }
 
     @Test
     fun readsWrappedQuotedLinesAndIgnoresTheFooter() {

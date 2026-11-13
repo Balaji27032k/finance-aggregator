@@ -20,7 +20,15 @@ data class StatementRow(
 )
 
 /** [accountNumber] is the account the statement says it is for, when the file says so. */
-data class StatementParse(val rows: List<StatementRow>, val skipped: Int, val problem: String?, val accountNumber: String? = null)
+data class StatementParse(
+    val rows: List<StatementRow>,
+    val skipped: Int,
+    val problem: String?,
+    val accountNumber: String? = null,
+    /** The balance and day printed at the top of the statement. */
+    val balance: java.math.BigDecimal? = null,
+    val balanceDate: LocalDate? = null,
+)
 
 /**
  * Reads a statement downloaded from net banking or YONO (CSV, or .xlsx with or without a password) and turns each line into the
@@ -76,8 +84,11 @@ object StatementParser {
         val refCol = column("ref no", "ref.", "cheque", "chq", "reference")
         val balanceCol = column("balance")
 
-        val accountNumber = rows.take(headerIndex).flatten()
-            .firstNotNullOfOrNull { Regex("""Account\s*Number\s*:?\s*(\d{6,})""", I).find(it)?.groupValues?.get(1) }
+        val preamble = rows.take(headerIndex).flatten()
+        val accountNumber = preamble.firstNotNullOfOrNull { Regex("""Account\s*Number\s*:?\s*(\d{6,})""", I).find(it)?.groupValues?.get(1) }
+        val stated = preamble.firstNotNullOfOrNull { Regex("""(?:Clear|Closing)\s*Balance\s*:?\s*([\d,]+(?:\.\d+)?)\s*(CR|DR)?""", I).find(it) }
+            ?.let { m -> money(m.groupValues[1])?.let { v -> if (m.groupValues[2].equals("DR", true)) v.negate() else v } }
+        val statedOn = preamble.firstNotNullOfOrNull { Regex("""Date\s+of\s+Statement\s*:\s*(\S+)""", I).find(it)?.groupValues?.get(1) }?.let { parseDate(it) }
 
         val out = mutableListOf<StatementRow>()
         var skipped = 0
@@ -100,7 +111,7 @@ object StatementParser {
                 balance = if (balanceCol >= 0) money(cell(balanceCol)) else null,
             )
         }
-        return StatementParse(out, skipped, if (out.isEmpty()) "No transactions were found in this file." else null, accountNumber)
+        return StatementParse(out, skipped, if (out.isEmpty()) "No transactions were found in this file." else null, accountNumber, stated, statedOn)
     }
 
     /** Banks wrap long text onto a new line that starts with a space, in the middle of a word; that break carries no space. */

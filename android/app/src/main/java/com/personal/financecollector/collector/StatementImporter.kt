@@ -5,6 +5,9 @@ import com.personal.financecollector.database.ParserStatus
 import com.personal.financecollector.database.RawFinancialEventEntity
 import com.personal.financecollector.database.SourceType
 import com.personal.financecollector.database.UploadStatus
+import com.personal.financecollector.database.set
+import com.personal.financecollector.ui.BalanceSnapshots
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
@@ -15,6 +18,9 @@ data class StatementImportResult(
     val from: LocalDate?,
     val to: LocalDate?,
     val problem: String?,
+    /** The balance the statement states for the day it was downloaded, when that is later than its last line. */
+    val statedBalance: BigDecimal? = null,
+    val statedOn: LocalDate? = null,
 )
 
 /** Stores the lines of a downloaded statement as events, so they merge with the bank's alerts and upload like any other. */
@@ -57,6 +63,13 @@ class StatementImporter(private val db: FinanceDatabase) {
             )
             if (inserted) added++ else had++
         }
-        return StatementImportResult(added, had, parsed.skipped, rows.minOf { it.date }, rows.maxOf { it.date }, null)
+        val last = rows.maxOf { it.date }
+        val statedOn = parsed.balanceDate
+        val stated = parsed.balance
+        if (stated != null && statedOn != null && !statedOn.isBefore(last)) {
+            val config = db.configDao()
+            config.set(BalanceSnapshots.KEY, BalanceSnapshots.update(config.get(BalanceSnapshots.KEY), bank, last4, stated, statedOn))
+        }
+        return StatementImportResult(added, had, parsed.skipped, rows.minOf { it.date }, last, null, stated, statedOn)
     }
 }

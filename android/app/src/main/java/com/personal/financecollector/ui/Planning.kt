@@ -13,26 +13,56 @@ data class AccountBalance(val bankCode: String, val last4: String, val balance: 
 
 data class NetWorthPoint(val date: LocalDate, val total: BigDecimal)
 
+/** Balances read from the top of a statement, kept as one line per account: bank|digits|amount|date. */
+object BalanceSnapshots {
+    const val KEY = "statement_balances"
+
+    fun parse(text: String?): List<AccountBalance> = text.orEmpty().lines().mapNotNull { line ->
+        val p = line.split('|')
+        if (p.size != 4) return@mapNotNull null
+        val amount = p[2].toBigDecimalOrNull() ?: return@mapNotNull null
+        val date = runCatching { LocalDate.parse(p[3]) }.getOrNull() ?: return@mapNotNull null
+        AccountBalance(p[0], p[1], amount, endOfDay(date))
+    }
+
+    /** Keeps the newest balance per account. */
+    fun update(text: String?, bank: String, last4: String, amount: BigDecimal, date: LocalDate): String {
+        val lines = text.orEmpty().lines().map { it.split('|') }.filter { it.size == 4 }
+        val newer = lines.any { it[1] == last4 && it[3] > date.toString() }
+        val kept = lines.filter { it[1] != last4 }.map { it.joinToString("|") }
+        val mine = if (newer) lines.filter { it[1] == last4 }.map { it.joinToString("|") } else listOf("${bank.replace('|', ' ')}|$last4|${amount.toPlainString()}|$date")
+        return (kept + mine).joinToString("\n")
+    }
+
+    private fun endOfDay(d: LocalDate) = d.plusDays(1).atStartOfDay(LedgerBuilder.IST).toInstant().toEpochMilli() - 1
+}
+
 /** [change] compares today with about a month ago, when there is a balance from then. */
 data class NetWorth(val total: BigDecimal, val accounts: List<AccountBalance>, val series: List<NetWorthPoint>, val change: BigDecimal?)
 
 /** Adds up the latest balance each bank message reported for each account. */
 object NetWorthCalculator {
 
-    fun latestBalances(ledger: List<LedgerTxn>): List<AccountBalance> {
+    fun latestBalances(ledger: List<LedgerTxn>, snapshots: List<AccountBalance> = emptyList()): List<AccountBalance> {
         val brand = AccountGrouping.brandOf(ledger)
-        return ledger.filter { it.balanceAfter != null && it.accountLast4 != null }
+        val fromMessages = ledger.filter { it.balanceAfter != null && it.accountLast4 != null }
             .groupBy { brand(it) to it.accountLast4!! }
             .map { (k, v) ->
                 val last = v.maxBy { it.timeMs }
                 AccountBalance(k.first, k.second, last.balanceAfter!!, last.timeMs)
             }
-            .sortedByDescending { it.balance }
+            .toMutableList()
+        // A balance printed on a statement can be newer than the last line in it; it wins only when it is newer than what the lines say.
+        for (s in snapshots) {
+            val i = fromMessages.indexOfFirst { it.last4 == s.last4 }
+            if (i < 0) fromMessages += s else if (fromMessages[i].asOfMs < s.asOfMs) fromMessages[i] = fromMessages[i].copy(balance = s.balance, asOfMs = s.asOfMs)
+        }
+        return fromMessages.sortedByDescending { it.balance }
     }
 
     /** [mine] limits the total to the user's own accounts (last digits); empty means every account with a known balance. */
-    fun compute(ledger: List<LedgerTxn>, excluded: Set<String>, today: LocalDate, mine: Set<String> = emptySet()): NetWorth {
-        val accounts = latestBalances(ledger).filter { it.key !in excluded && (mine.isEmpty() || it.last4 in mine) }
+    fun compute(ledger: List<LedgerTxn>, excluded: Set<String>, today: LocalDate, mine: Set<String> = emptySet(), snapshots: List<AccountBalance> = emptyList()): NetWorth {
+        val accounts = latestBalances(ledger, snapshots).filter { it.key !in excluded && (mine.isEmpty() || it.last4 in mine) }
         val brand = AccountGrouping.brandOf(ledger)
         val byAccount = ledger.filter {
             it.balanceAfter != null && it.accountLast4 != null && (mine.isEmpty() || it.accountLast4 in mine) &&

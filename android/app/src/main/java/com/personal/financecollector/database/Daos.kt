@@ -42,6 +42,13 @@ abstract class EventDao {
     @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
     abstract fun observeRecent(limit: Int): Flow<List<RawFinancialEventEntity>>
 
+    /** What transactions are built from; payment-app notifications are left out so they cannot crowd out older statement lines. */
+    @Query("SELECT * FROM raw_financial_events WHERE sourceType != 'NOTIFICATION' ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
+    abstract fun observeLedgerEvents(limit: Int): Flow<List<RawFinancialEventEntity>>
+
+    @Query("SELECT * FROM raw_financial_events WHERE sourceType != 'NOTIFICATION' ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
+    abstract suspend fun ledgerEvents(limit: Int): List<RawFinancialEventEntity>
+
     @Query("SELECT * FROM raw_financial_events ORDER BY eventTimestamp DESC, capturedTimestamp DESC LIMIT :limit")
     abstract suspend fun recentList(limit: Int): List<RawFinancialEventEntity>
 

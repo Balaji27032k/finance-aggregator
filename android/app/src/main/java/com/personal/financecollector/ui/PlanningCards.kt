@@ -66,7 +66,7 @@ fun NetWorthCard(netWorth: NetWorth, onOpenAccounts: () -> Unit) {
         }
         if (netWorth.series.size >= 2) TrendLine(netWorth.series, Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            netWorth.accounts.take(5).forEach { a -> StatRow("${a.bankCode} ending ${a.last4}", EventPresenter.rupees(a.balance)) }
+            netWorth.accounts.take(5).forEach { a -> StatRow("${a.bankCode} ending ${a.last4} \u00b7 ${shortDate(java.time.Instant.ofEpochMilli(a.asOfMs).atZone(LedgerBuilder.IST).toLocalDate())}", EventPresenter.rupees(a.balance)) }
         }
         Text(
             "Balances are as of each account's latest message. Credit cards and other accounts can be left out under My accounts.",
