@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.personal.financecollector.database.OwnAccountEntity
 
 /** Where the user lists their own accounts: only these count towards net worth and as "own transfers". */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun OwnAccountsScreen(
     detected: List<DetectedAccount>,
@@ -40,9 +41,16 @@ fun OwnAccountsScreen(
     aliases: Map<String, List<Alias>>,
     netWorthExcluded: Set<String>,
     onToggleNetWorth: (String, Boolean) -> Unit,
+    statementMessage: String?,
+    onImportStatement: (android.net.Uri, String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var bank by remember { mutableStateOf("") }
+    var statementAccount by remember { mutableStateOf<String?>(null) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val chosen = entries.firstOrNull { it.kind == "ACCOUNT" && it.value == statementAccount }
+        if (uri != null && chosen != null) onImportStatement(uri, chosen.display.substringBefore(" ending "), chosen.value)
+    }
     var digits by remember { mutableStateOf("") }
     var digitsError by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -79,7 +87,7 @@ fun OwnAccountsScreen(
                     Column(Modifier.weight(1f).clickable { onOpenAccount(e.value) }.padding(vertical = 4.dp)) {
                         Text(e.display, fontWeight = FontWeight.Medium)
                         Text(
-                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${rupeesWhole(it.balance)}" } ?: " \u00b7 no balance in the messages yet") + " \u203a",
+                            "$seen transaction${if (seen == 1) "" else "s"}" + (balance?.let { " \u00b7 balance ${EventPresenter.rupees(it.balance)}" } ?: " \u00b7 no balance in the messages yet") + " \u203a",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -126,6 +134,26 @@ fun OwnAccountsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (mine.isNotEmpty()) {
+            Panel {
+                Text("Add transactions from a bank statement", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Some banks, SBI for one, send few or no messages. Download the statement as CSV (in SBI YONO: Accounts > Statement > Download), " +
+                        "pick the account, and choose the file. Payments already seen in a notification are matched, not counted twice, and importing the same file again adds nothing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    mine.forEach { e ->
+                        androidx.compose.material3.FilterChip(statementAccount == e.value, { statementAccount = e.value }, { Text(e.display) })
+                    }
+                }
+                Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = statementAccount != null, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (statementAccount == null) "Pick an account first" else "Choose the statement file")
+                }
+                statementMessage?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            }
         }
         if (others.isNotEmpty()) {
             Panel {

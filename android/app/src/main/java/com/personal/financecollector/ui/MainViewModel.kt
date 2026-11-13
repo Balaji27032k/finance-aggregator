@@ -586,6 +586,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** What happened to the last statement the user imported. */
+    val statementMessage = MutableStateFlow<String?>(null)
+
+    /** Reads a statement file the user picked and adds its lines for [last4], then sends them up like any other transaction. */
+    fun importStatement(uri: android.net.Uri, bank: String, last4: String) {
+        viewModelScope.launch {
+            statementMessage.value = "Reading the statement..."
+            val ctx = getApplication<Application>()
+            val bytes = withContext(Dispatchers.IO) {
+                try {
+                    ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } catch (e: java.io.IOException) {
+                    null
+                }
+            }
+            if (bytes == null) {
+                statementMessage.value = "Could not open that file."
+                return@launch
+            }
+            val isOldExcel = bytes.size > 4 && bytes[0] == 0xD0.toByte() && bytes[1] == 0xCF.toByte()
+            val text = if (isOldExcel) "PK" else String(bytes, Charsets.UTF_8)
+            val r = com.personal.financecollector.collector.StatementImporter(db).import(text, bank, last4)
+            statementMessage.value = when {
+                r.problem != null -> r.problem
+                else -> "Added ${r.added} transaction${if (r.added == 1) "" else "s"} from ${shortDate(r.from!!)} to ${shortDate(r.to!!)}." +
+                    (if (r.alreadyHad > 0) " ${r.alreadyHad} were already here." else "") +
+                    (if (r.skipped > 0) " ${r.skipped} line${if (r.skipped == 1) " was" else "s were"} not clear enough to read and left out." else "")
+            }
+            if (r.added > 0) UploadScheduler.enqueueNow(ctx)
+        }
+    }
+
     /** Accepts a raw header such as "VM-SBIUPI-S" or a bare code; returns false if it is not a usable sender id. */
     fun addSmsSender(input: String): Boolean {
         val code = SmsSender.entityCode(input) ?: return false

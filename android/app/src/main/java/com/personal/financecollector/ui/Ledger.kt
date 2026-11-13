@@ -53,6 +53,10 @@ data class LedgerTxn(
     val splits: List<SplitPart> = emptyList(),
     /** When a card or ATM number in the message was tied to one of the user's accounts, the digits the message actually showed. */
     val instrumentLast4: String? = null,
+    /** True when the account was not in any message and was inferred from the accounts the user listed. */
+    val accountAssumed: Boolean = false,
+    /** False for a transaction known only from a bank statement, which has a date but no time of day. */
+    val timeKnown: Boolean = true,
 ) {
     /** The category and amount pairs this payment counts as in category totals. */
     val categoryParts: List<Pair<String, BigDecimal>>
@@ -77,6 +81,7 @@ object LedgerBuilder {
         val rank: Int = when (event.sourceType) {
             SourceType.GMAIL -> 0
             SourceType.SMS -> 1
+            SourceType.MANUAL -> 1
             else -> 2
         }
     }
@@ -87,7 +92,9 @@ object LedgerBuilder {
     }
 
     fun build(events: List<RawFinancialEventEntity>, parse: (RawFinancialEventEntity) -> ParsedTransaction? = TransactionParser::parse): List<LedgerTxn> {
-        val items = events.sortedBy { it.eventTimestamp }.mapNotNull { e -> parse(e)?.let { Item(e, it) } }
+        val all = events.sortedBy { it.eventTimestamp }.mapNotNull { e -> parse(e)?.let { Item(e, it) } }
+        val items = all.filter { it.event.sourceType != SourceType.MANUAL }
+        val statements = all.filter { it.event.sourceType == SourceType.MANUAL }
         val groups = mutableListOf<Group>()
         val byReference = HashMap<String, Group>()
 
@@ -107,7 +114,40 @@ object LedgerBuilder {
             }
             if (refKey != null) byReference.putIfAbsent(refKey, group)
         }
+
+        // A statement line joins the alert for the same payment when the reference matches, or failing that when the amount, direction
+        // and name agree within a day and a half; otherwise it is a transaction no alert reported.
+        val alertGroups = groups.toList()
+        for (s in statements) {
+            val p = s.parsed
+            val reference = p.referenceNo?.takeIf { it.length >= MIN_REFERENCE }
+            val byRef = reference?.let { byReference["$it|${p.direction}|${p.amount.toPlainString()}"] }?.takeIf { g -> g.items.none { it.event.sourceType == SourceType.MANUAL } }
+            val group = byRef ?: statementMatch(alertGroups, s)
+            if (group != null) group.items += s else groups += Group(s)
+        }
         return groups.map { toTxn(it) }.sortedByDescending { it.timeMs }
+    }
+
+    private const val STATEMENT_WINDOW_MS = 36 * 3_600_000L
+
+    private fun statementMatch(groups: List<Group>, s: Item): Group? {
+        val p = s.parsed
+        val at = s.event.eventTimestamp
+        return groups.asSequence()
+            .filter { g -> kotlin.math.abs(g.items.first().event.eventTimestamp - at) <= STATEMENT_WINDOW_MS }
+            .filter { g -> g.items.none { it.event.sourceType == SourceType.MANUAL } }
+            .filter { g ->
+                val q = g.items.first().parsed
+                q.direction == p.direction && q.amount.compareTo(p.amount) == 0
+            }
+            .filter { g ->
+                // Only payment-app alerts, which carry no bank, can be matched by amount; a message that names an account must name this one.
+                g.items.all { it.parsed.accountLast4 == null || it.parsed.accountLast4 == p.accountLast4 } &&
+                    g.items.all { it.event.sourceType == SourceType.NOTIFICATION || it.parsed.accountLast4 == p.accountLast4 }
+            }
+            .filter { g -> g.items.all { p.referenceNo == null || it.parsed.referenceNo == null || it.parsed.referenceNo == p.referenceNo } }
+            .filter { g -> g.items.all { compatible(p.counterparty, it.parsed.counterparty) } }
+            .minByOrNull { g -> kotlin.math.abs(g.items.first().event.eventTimestamp - at) }
     }
 
     private fun nearby(groups: List<Group>, item: Item, reference: String?): Group? {
@@ -140,7 +180,7 @@ object LedgerBuilder {
         val ordered = group.items.sortedWith(compareBy<Item> { it.rank }.thenBy { it.event.eventTimestamp })
         fun <T> pick(field: (ParsedTransaction) -> T?): T? = ordered.firstNotNullOfOrNull { field(it.parsed) }
         val first = ordered.first()
-        val earliest = group.items.minOf { it.event.eventTimestamp }
+        val earliest = group.items.filter { it.event.sourceType != SourceType.MANUAL }.ifEmpty { group.items }.minOf { it.event.eventTimestamp }
         val counterparty = pick { it.counterparty }
         val mode = pick { it.paymentMode }
         val note = pick { it.note }
@@ -174,6 +214,7 @@ object LedgerBuilder {
             parts = parts,
             status = worst,
             problem = parts.firstOrNull { it.kind == StatusKind.FAILED || it.kind == StatusKind.RETRYING }?.problem,
+            timeKnown = group.items.any { it.event.sourceType != SourceType.MANUAL },
         )
     }
 
@@ -182,6 +223,7 @@ object LedgerBuilder {
     private fun sourceName(type: SourceType): String = when (type) {
         SourceType.GMAIL -> "Email"
         SourceType.SMS -> "SMS"
+        SourceType.MANUAL -> "Statement"
         else -> "Notification"
     }
 }
@@ -190,12 +232,13 @@ object LedgerBuilder {
 object Categories {
     const val OTHER = "Other"
     const val OWN_TRANSFER = "Own transfer"
+    const val P2P = "P2P transfer"
 
     /** What the user can pick when fixing a transaction. */
     val CHOICES = listOf(
         "Food & drinks", "Groceries", "Transport", "Shopping", "Bills & recharge", "Rent & housing", "Health",
         "Investments", "Entertainment & apps", "Education", "Travel", "Personal care", "Gifts & donations",
-        "Cash withdrawal", "Cash deposit", "Salary", "Money received", "Interest", OWN_TRANSFER, OTHER,
+        "Cash withdrawal", "Cash deposit", "Salary", P2P, "Money received", "Interest", OWN_TRANSFER, OTHER,
     )
 
     private val rules: List<Pair<String, Regex>> = listOf(
@@ -218,6 +261,23 @@ object Categories {
         if (mode.equals("ATM", ignoreCase = true)) return if (credit) "Cash deposit" else "Cash withdrawal"
         rules.firstOrNull { it.second.containsMatchIn(text) }?.let { return it.first }
         if (text.contains("interest")) return "Interest"
+        if (looksLikePerson(counterparty, mode)) return P2P
         return if (credit) "Money received" else OTHER
+    }
+
+    private val business = r(
+        "\\b(pvt|ltd|llp|limited|enterprises?|traders?|stores?|shop|mart|bazaar|agency|services?|solutions?|technolog\\w*|tech|" +
+            "hotel|cafe|restaurant|bank|finance|insurance|hospital|clinic|school|college|trust|foundation|motors|electronics|textiles?|" +
+            "jewell?ers?|fuel|petro\\w*|gas|pharma\\w*|medicals?|general|provision|bakery|sweets|tea|coffee|biryani|foods?|kitchen|salon|studio|" +
+            "gym|ticket|recharge|payments?|wallet|upi|mobiles?|telecom)\\b",
+    )
+
+    /** A UPI, IMPS or NEFT counterparty that looks like an individual: a mobile-number address or a short plain name. */
+    fun looksLikePerson(counterparty: String?, mode: String?): Boolean {
+        val c = counterparty?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        if (mode != null && !Regex("UPI|IMPS|NEFT|RTGS", RegexOption.IGNORE_CASE).matches(mode)) return false
+        if (Regex("\\d{10}@.*").matches(c)) return true
+        if (c.contains('@') || !Regex("[A-Za-z .'-]{2,40}").matches(c) || c.split(Regex("\\s+")).size > 4) return false
+        return !business.containsMatchIn(c)
     }
 }

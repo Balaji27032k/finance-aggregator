@@ -82,7 +82,10 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             when (val outcome = api.rates(link.first, link.second, refresh)) {
-                is RatesOutcome.Ok -> _state.update { it.copy(rates = outcome.rates, ratesBusy = false, ratesNote = outcome.rates.message) }
+                is RatesOutcome.Ok -> _state.update {
+                    val filled = if (it.dirty) it.profile else it.profile.copy(rates = outcome.rates.fillBlanks(it.profile.rates))
+                    it.copy(rates = outcome.rates, profile = filled, ratesBusy = false, ratesNote = outcome.rates.message)
+                }
                 RatesOutcome.Unauthorized -> _state.update { it.copy(ratesBusy = false, ratesNote = "This phone is no longer paired. Pair it again in the Health tab.") }
                 is RatesOutcome.Failed -> _state.update { it.copy(ratesBusy = false, ratesNote = "Could not get rates: ${outcome.reason}.") }
             }

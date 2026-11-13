@@ -188,6 +188,7 @@ class MainActivity : ComponentActivity() {
                 val netWorthExcluded by viewModel.netWorthExcluded.collectAsStateWithLifecycle()
                 BackHandler(enabled = tab >= 5) { tab = 4 }
                 val ownEntries by viewModel.ownEntries.collectAsStateWithLifecycle()
+                val statementMessage by viewModel.statementMessage.collectAsStateWithLifecycle()
                 val detectedAccounts by viewModel.detectedAccounts.collectAsStateWithLifecycle()
                 val accountAliases by viewModel.accountAliases.collectAsStateWithLifecycle()
                 // Keep the home-screen widget in step with what the app is showing.
@@ -250,6 +251,8 @@ class MainActivity : ComponentActivity() {
                             aliases = accountAliases,
                             netWorthExcluded = netWorthExcluded,
                             onToggleNetWorth = viewModel::setIncludedInNetWorth,
+                            statementMessage = statementMessage,
+                            onImportStatement = viewModel::importStatement,
                             modifier = body,
                         )
                         7 -> PayeesScreen(ledger, payeeRules, viewModel::setPayeeRule, viewModel::removePayeeRule, body)

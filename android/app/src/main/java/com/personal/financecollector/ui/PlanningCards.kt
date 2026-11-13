@@ -55,18 +55,18 @@ fun NetWorthCard(netWorth: NetWorth, onOpenAccounts: () -> Unit) {
             )
             return@InfoCard
         }
-        Text(rupeesWhole(netWorth.total), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text(EventPresenter.rupees(netWorth.total), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         netWorth.change?.let { change ->
             val up = change.signum() >= 0
             Text(
-                (if (up) "Up " else "Down ") + rupeesWhole(change.abs()) + " in the last 30 days",
+                (if (up) "Up " else "Down ") + EventPresenter.rupees(change.abs()) + " in the last 30 days",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (up) MoneyColors.income() else MoneyColors.spend(),
             )
         }
         if (netWorth.series.size >= 2) TrendLine(netWorth.series, Modifier.padding(top = 10.dp))
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            netWorth.accounts.take(5).forEach { a -> StatRow("${a.bankCode} ending ${a.last4}", rupeesWhole(a.balance)) }
+            netWorth.accounts.take(5).forEach { a -> StatRow("${a.bankCode} ending ${a.last4}", EventPresenter.rupees(a.balance)) }
         }
         Text(
             "Balances are as of each account's latest message. Credit cards and other accounts can be left out under My accounts.",
@@ -92,7 +92,7 @@ private fun TrendLine(points: List<NetWorthPoint>, modifier: Modifier = Modifier
     val topValue = hi + pad
     Column(modifier) {
         Text(
-            selected?.let { points[it] }?.let { "${it.date.format(monthYear)}   ${rupeesWhole(it.total)}" } ?: "Touch the line to see a month",
+            selected?.let { points[it] }?.let { "${it.date.format(monthYear)}   ${EventPresenter.rupees(it.total)}" } ?: "Touch the line to see a month",
             style = MaterialTheme.typography.labelMedium,
             color = if (selected == null) muted else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(bottom = 6.dp),

@@ -97,7 +97,27 @@ object TransactionParser {
         SourceType.GMAIL -> EmailTransactionParser.parse(
             event.sourceSender.orEmpty(), event.rawPayload.substringBefore('\n'), event.rawPayload.substringAfter('\n', ""), event.eventTimestamp,
         )
+        SourceType.MANUAL -> StatementParser.parseEvent(event.rawPayload)
         else -> null
+    }
+
+    /** What a bank statement's description column says: who, how and the reference. Shared with [StatementParser]. */
+    internal data class Narration(val counterparty: String?, val mode: String?, val reference: String?, val note: String?)
+
+    private val transferPrefix = Regex("""^(?:TO|BY)\s+TRANSFER\s*[-:]?\s*|^TRANSFER\s+(?:TO|FROM)\s*[-:]?\s*""", I)
+
+    internal fun narration(raw: String): Narration {
+        val text = raw.replace(Regex("""\s+"""), " ").trim()
+        val structured = upiStructured.find(text)
+        val imps = impsStructured.find(text)
+        val mode = mode(text)
+        val ref = structured?.groupValues?.get(1) ?: imps?.groupValues?.get(1) ?: reference.find(text)?.groupValues?.get(1)
+        val name = structured?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: structured?.groupValues?.get(4)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: imps?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (mode == "ATM") null else text.replace(transferPrefix, "").take(60).trim().ifBlank { null }
+        val remark = structured?.groupValues?.get(5)?.trim()?.takeIf { it.isNotEmpty() && !it.equals("UPI", true) }
+        return Narration(name, mode, ref, remark ?: special(text))
     }
 
     fun parseSms(bankCode: String, body: String, eventTimestampMs: Long): ParsedTransaction? =

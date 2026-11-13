@@ -18,7 +18,7 @@ public class RatesController {
 
     @GetMapping("/api/v1/rates")
     MarketRates deviceGet() {
-        return service.current().orElseGet(() -> MarketRates.unavailable("No rates fetched yet. Tap Fetch latest rates."));
+        return service.currentOrStandard();
     }
 
     @PostMapping("/api/v1/rates/refresh")

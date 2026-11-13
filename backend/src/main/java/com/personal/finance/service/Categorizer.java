@@ -50,6 +50,32 @@ public final class Categorizer {
         if (text.contains("interest")) {
             return "Interest";
         }
+        if (looksLikePerson(counterparty, paymentMode)) {
+            return "P2P transfer";
+        }
         return direction == Direction.CREDIT ? "Money received" : "Other";
+    }
+
+    private static final Pattern BUSINESS = p("\\b(pvt|ltd|llp|limited|enterprises?|traders?|stores?|shop|mart|bazaar|agency|services?|solutions?|technolog\\w*|tech|"
+            + "hotel|cafe|restaurant|bank|finance|insurance|hospital|clinic|school|college|trust|foundation|motors|electronics|textiles?|"
+            + "jewell?ers?|fuel|petro\\w*|gas|pharma\\w*|medicals?|general|provision|bakery|sweets|tea|coffee|biryani|foods?|kitchen|salon|studio|"
+            + "gym|ticket|recharge|payments?|wallet|upi|mobiles?|telecom)\\b");
+
+    /** A UPI, IMPS or NEFT counterparty that looks like an individual: a mobile-number address or a short plain name. */
+    static boolean looksLikePerson(String counterparty, String paymentMode) {
+        if (counterparty == null || counterparty.isBlank()) {
+            return false;
+        }
+        if (paymentMode != null && !paymentMode.matches("(?i)UPI|IMPS|NEFT|RTGS")) {
+            return false;
+        }
+        String c = counterparty.trim();
+        if (c.matches("\\d{10}@.*")) {
+            return true;
+        }
+        if (c.contains("@") || !c.matches("[A-Za-z .'-]{2,40}") || c.split("\\s+").length > 4) {
+            return false;
+        }
+        return !BUSINESS.matcher(c).find();
     }
 }

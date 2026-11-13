@@ -110,7 +110,7 @@ fun TxnRow(txn: LedgerTxn, onClick: () -> Unit, modifier: Modifier = Modifier) {
                     else -> MaterialTheme.colorScheme.onSurface
                 },
             )
-            Text(timeOfDay(txn.timeMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (txn.timeKnown) Text(timeOfDay(txn.timeMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -271,9 +271,9 @@ fun TxnDetailSheet(
                 Detail("Category", txn.category + if (txn.internalTransfer) " (not counted in spending)" else "")
                 txn.splits.forEach { Detail("  " + (it.name ?: it.category), EventPresenter.rupees(it.amount) + if (it.name != null) " (${it.category})" else "") }
                 Detail("Date", txn.date.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)))
-                Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
+                if (txn.timeKnown) Detail("Received", Instant.ofEpochMilli(txn.timeMs).atZone(LedgerBuilder.IST).format(timeFormat))
                 txn.paymentMode?.let { Detail("Payment mode", it) }
-                txn.accountLast4?.let { Detail("Account", "ending $it") }
+                txn.accountLast4?.let { Detail("Account", "ending $it" + if (txn.accountAssumed) " (assumed)" else "") }
                 txn.counterpartyAccountLast4?.let { Detail("Other account", "ending $it") }
                 txn.referenceNo?.let { Detail("Reference", it) }
                 txn.balanceAfter?.let { Detail("Balance after", EventPresenter.rupees(it)) }

@@ -116,11 +116,13 @@ class RatesServiceTest {
     @Test
     void withoutAKeyOrAnUnreadableReplyNothingIsInventedOrSaved() {
         MarketRates none = new RatesService(model(false, Optional.empty(), null), jdbc, clock).refresh();
-        assertEquals("UNAVAILABLE", none.status());
-        assertTrue(none.items().isEmpty());
+        assertEquals("DEFAULTS", none.status());
+        assertTrue(none.message().contains("standard values"));
+        assertTrue(none.items().stream().allMatch(i -> "standard".equals(i.asOf())));
+        assertTrue(none.items().stream().anyMatch(i -> i.key().equals("ppf")));
         assertNull(none.fetchedAt());
         MarketRates garbled = new RatesService(model(true, Optional.of(new AiModel.Grounded("I could not find any rates", List.of())), null), jdbc, clock).refresh();
-        assertEquals("UNAVAILABLE", garbled.status());
+        assertEquals("DEFAULTS", garbled.status());
         assertFalse(new RatesService(model(true, Optional.empty(), null), jdbc, clock).current().isPresent());
     }
 

@@ -79,6 +79,31 @@ public class RatesService {
         this.clock = clock;
     }
 
+    /** The last fetched copy if there is one, otherwise the standard values, so the screen is never empty. */
+    public MarketRates currentOrStandard() {
+        return current().orElseGet(() -> standard("Standard values, not live. Tap Fetch latest rates to try a live lookup."));
+    }
+
+    /**
+     * Long-standing government-notified rates and usual planning assumptions. They are not read from the web, so they are labelled as
+     * standard values and the person is told to check the current rate.
+     */
+    static MarketRates standard(String message) {
+        Map<String, Double> values = Map.ofEntries(
+                Map.entry("savings", 3.0), Map.entry("fd1y", 6.5), Map.entry("fd5y", 6.5), Map.entry("rd", 6.5), Map.entry("ppf", 7.1),
+                Map.entry("ssy", 8.2), Map.entry("nsc", 7.7), Map.entry("kvp", 7.5), Map.entry("scss", 8.2), Map.entry("poSavings", 4.0),
+                Map.entry("poRd", 6.7), Map.entry("poTd5y", 7.5), Map.entry("mis", 7.4), Map.entry("epf", 8.25), Map.entry("inflation", 6.0),
+                Map.entry("equity", 12.0));
+        List<MarketRates.Rate> items = new ArrayList<>();
+        for (Spec s : SPECS) {
+            Double v = values.get(s.key());
+            if (v != null) {
+                items.add(new MarketRates.Rate(s.key(), s.label(), BigDecimal.valueOf(v).stripTrailingZeros(), "standard", "Standard value, not live"));
+            }
+        }
+        return new MarketRates(null, "DEFAULTS", message, items, List.of());
+    }
+
     /** The last fetched copy, if any. */
     public Optional<MarketRates> current() {
         List<String> rows = jdbc.queryForList("SELECT body FROM market_rates WHERE id = ?", String.class, ROW);
@@ -127,7 +152,7 @@ public class RatesService {
             MarketRates p = previous.get();
             return new MarketRates(p.fetchedAt(), "STALE", message + " Showing the last copy.", p.items(), p.sources());
         }
-        return MarketRates.unavailable(message);
+        return standard(message + " Showing standard values instead.");
     }
 
     /** Values that are missing, unknown, unreadable or outside a sensible range are dropped. */

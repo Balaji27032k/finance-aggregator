@@ -120,8 +120,11 @@ class LedgerTest {
         assertEquals("Salary", Categories.of(true, "ACME", "NEFT", "Salary"))
         assertEquals("Cash withdrawal", Categories.of(false, "ATM WDL", "ATM", null))
         assertEquals("Rent & housing", Categories.of(false, "Landlord Rao", "UPI", null))
-        assertEquals("Other", Categories.of(false, "Ravi Kumar", "UPI", null))
-        assertEquals("Money received", Categories.of(true, "Ravi Kumar", "UPI", null))
+        assertEquals("P2P transfer", Categories.of(false, "Ravi Kumar", "UPI", null))
+        assertEquals("P2P transfer", Categories.of(true, "Ravi Kumar", "UPI", null))
+        assertEquals("P2P transfer", Categories.of(false, "9876543210@ybl", "UPI", null))
+        assertEquals("Other", Categories.of(false, "Sri Lakshmi Traders", "UPI", null))
+        assertEquals("Other", Categories.of(false, "Ravi Kumar", "CARD", null))
     }
 
     @Test

@@ -16,6 +16,19 @@ data class MarketRates(
     val items: List<RateItem>,
     val sources: List<RateSource>,
 ) {
+    /** Fills only the assumptions that are still empty, so a first visit shows sensible figures and nothing typed is replaced. */
+    fun fillBlanks(current: ProfileRates): ProfileRates {
+        val found = toAssumptions(ProfileRates())
+        return current.copy(
+            inflation = current.inflation ?: found.inflation,
+            equity = current.equity ?: found.equity,
+            fd = current.fd ?: found.fd,
+            ppf = current.ppf ?: found.ppf,
+            epf = current.epf ?: found.epf,
+            savings = current.savings ?: found.savings,
+        )
+    }
+
     /** The rates this person's plans use, with the ones that were found replacing what was there; others are left alone. */
     fun toAssumptions(current: ProfileRates): ProfileRates {
         fun pick(vararg keys: String): Double? = keys.firstNotNullOfOrNull { k -> items.firstOrNull { it.key == k }?.percent?.toDouble() }

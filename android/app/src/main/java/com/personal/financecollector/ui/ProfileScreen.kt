@@ -181,11 +181,11 @@ fun ProfileScreen(vm: ProfileViewModel, accounts: List<AccountLine>, onManageAcc
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(a.balance?.let { rupeesWhole(it) } ?: "-", fontWeight = FontWeight.SemiBold)
+                    Text(a.balance?.let { EventPresenter.rupees(it) } ?: "-", fontWeight = FontWeight.SemiBold)
                 }
             }
             val total = accounts.mapNotNull { it.balance }.fold(BigDecimal.ZERO, BigDecimal::add)
-            if (accounts.any { it.balance != null }) StatRow("Total across accounts", rupeesWhole(total))
+            if (accounts.any { it.balance != null }) StatRow("Total across accounts", EventPresenter.rupees(total))
             Text(
                 "Balances are the last one each bank reported by message, so they can be a little behind. Card and ATM payments count towards the account they come from.",
                 style = MaterialTheme.typography.bodySmall,
@@ -271,7 +271,7 @@ fun ProfileScreen(vm: ProfileViewModel, accounts: List<AccountLine>, onManageAcc
         Panel {
             Text("Latest market rates", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Looked up on the web for each kind of investment. Anything that could not be confirmed on a page is left out, never guessed.",
+                "Looked up on the web for each kind of investment. When a live lookup is not possible, standard values are shown and marked as such. Nothing is guessed.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -110,4 +110,33 @@ class OverlayTest {
         assertTrue(csv.contains("\"Ravi, Kumar\""))
         assertEquals(2, csv.trim().lines().size)
     }
+
+    @Test
+    fun aMobileNumberIsOnePayeeWhicheverUpiHandleItHas() {
+        assertEquals(LedgerOverlay.payeeKey("9876543210@ybl"), LedgerOverlay.payeeKey("9876543210@oksbi"))
+        assertEquals("9876543210", LedgerOverlay.payeeKey("9876543210@ybl"))
+        assertEquals("archana kumar", LedgerOverlay.payeeKey("Archana Kumar"))
+    }
+
+    private val ownThree = OwnSettings(
+        accountLast4s = setOf("0001", "8991", "5867"), accountBrands = mapOf("0001" to "CSB", "8991" to "INDIAN", "5867" to "SBI"),
+    )
+
+    @Test
+    fun aPaymentAppAlertWithNoBankIsPlacedOnTheOnlyAccountThatSendsNoAlerts() {
+        val chatty = (1..4).map { txn("c$it", account = "0001") } + (1..4).map { txn("i$it", account = "8991") }
+        val app = txn("app", account = null).copy(sources = listOf("Notification"))
+        val out = LedgerOverlay.apply(chatty + app, emptyMap(), emptyMap(), ownThree).first { it.key == "app" }
+        assertEquals("5867", out.accountLast4)
+        assertTrue(out.accountAssumed)
+    }
+
+    @Test
+    fun nothingIsAssumedWhenTwoAccountsAreQuiet() {
+        val chatty = (1..4).map { txn("c$it", account = "0001") }
+        val app = txn("app", account = null).copy(sources = listOf("Notification"))
+        val out = LedgerOverlay.apply(chatty + app, emptyMap(), emptyMap(), ownThree).first { it.key == "app" }
+        assertEquals(null, out.accountLast4)
+        assertFalse(out.accountAssumed)
+    }
 }

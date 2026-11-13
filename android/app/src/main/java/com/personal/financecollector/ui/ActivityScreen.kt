@@ -169,7 +169,7 @@ private fun TransactionCard(t: LedgerTxn, onEdit: (LedgerTxn) -> Unit) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
+        if (t.timeKnown) Text(
             "Received " + Instant.ofEpochMilli(t.timeMs).atZone(LedgerBuilder.IST).format(receivedFormat),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

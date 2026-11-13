@@ -36,6 +36,7 @@ public class GeminiClient implements AiModel {
     private LocalDate day;
     private int used;
     private Instant pausedUntil = Instant.EPOCH;
+    private Instant searchPausedUntil = Instant.EPOCH;
     private volatile String problem;
 
     public GeminiClient(AiProperties properties, Clock clock) {
@@ -92,6 +93,10 @@ public class GeminiClient implements AiModel {
             problem = "No AI key is set on the server.";
             return Optional.empty();
         }
+        if (webSearch && clock.instant().isBefore(searchPausedUntil)) {
+            problem = "Google recently refused web search for this key, so it is not retried yet.";
+            return Optional.empty();
+        }
         if (!acquire()) {
             problem = "The AI is resting (daily limit or rate limit).";
             return Optional.empty();
@@ -113,14 +118,19 @@ public class GeminiClient implements AiModel {
                     .build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 429) {
-                pause();
-                problem = "The AI is rate limited right now. Try again in a minute.";
-                log.warn("AI model rate limit reached; using the built-in search for a minute");
+                if (webSearch) {
+                    searchPausedUntil = clock.instant().plusSeconds(3600);
+                    problem = "Google answered 'quota exceeded' for web search. Free keys often have no web-search allowance. " + reason(response.body());
+                } else {
+                    pause();
+                    problem = "The AI is rate limited right now. Try again in a minute.";
+                }
+                log.warn("AI model rate limit reached (search={})", webSearch);
                 return Optional.empty();
             }
             if (response.statusCode() != 200) {
                 problem = webSearch && (response.statusCode() == 400 || response.statusCode() == 403)
-                        ? "Web search is not available for this AI key or model (HTTP " + response.statusCode() + ")."
+                        ? "Web search is not available for this AI key or model (HTTP " + response.statusCode() + "). " + reason(response.body())
                         : "The AI answered HTTP " + response.statusCode() + ".";
                 log.warn("AI model answered HTTP {}", response.statusCode());
                 return Optional.empty();
@@ -133,6 +143,16 @@ public class GeminiClient implements AiModel {
             problem = "The AI could not be reached.";
             log.warn("AI model call failed: {}", e.getClass().getSimpleName());
             return Optional.empty();
+        }
+    }
+
+    /** Google's own short explanation, if its error body has one (it never contains the key). */
+    private String reason(String body) {
+        try {
+            String message = mapper.readTree(body).path("error").path("message").asString("").replaceAll("\\s+", " ").trim();
+            return message.isEmpty() ? "" : "Google said: " + (message.length() > 180 ? message.substring(0, 180) + "..." : message);
+        } catch (RuntimeException e) {
+            return "";
         }
     }
 
